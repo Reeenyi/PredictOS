@@ -21,7 +21,9 @@
             ((((uint32_t)(prio)) << PENDSV_PRIO_OFFSET) &		\
             PENDSV_PRIO_BITMASK))
 
-#define MAX_TASK_NUM (32U)
+#if MAX_TASK_NUM > 32U
+#error "MAX_TASK_NUM cannot exceed 32"
+#endif
 
 extern uint32_t SystemCoreClock;
 
@@ -29,13 +31,32 @@ PdOSTaskHandle * volatile currTask = NULL;
 PdOSTaskHandle * volatile nextTask = NULL;
 
 static PdOSTaskHandle *tasks[MAX_TASK_NUM + 1U];
+static uint32_t readySet = 0U;
 uint8_t activeTaskNum = 0;
 uint8_t currTaskIndex = 0;
+
+PdOSTaskHandle idleTaskHandle;
+
+void idle_task_func(void)
+{
+	while (1)
+	{
+		PdOS_on_idle();
+	}
+}
+
+__attribute__((weak)) void PdOS_on_idle(void)
+{
+	// default weak function
+}
+
+void PdOS_tick(void);
 
 // Callback function for systick. Used privately.
 void _PdOS_systick_callback(systick_driver_t *sdp)
 {
 	(void)sdp;
+	PdOS_tick();
 	__disable_irq();
 	PdOS_sched();
 	__enable_irq();
@@ -46,22 +67,26 @@ void _PdOS_set_systick(void)
 {
 	systick_init(&DRV_SYSTICK);
 	systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
-	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / 1000U));  // frequency set to 1000Hz
+	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));  // frequency set to 1000Hz
 	systick_set_cb(&DRV_SYSTICK, _PdOS_systick_callback);
 	systick_start(&DRV_SYSTICK);
 }
 
-void PdOS_init(void)
+void PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 {
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
+	// create the idle task
+	PdOS_create_task(&idleTaskHandle, &idle_task_func, idleStkSto, idleStkSize);
 }
 
 void PdOS_run()
 {
 	_PdOS_set_systick();
 
-	__disable_irq();
+	// call the scheduler explicitly
+	// to transfer control to the RTOS
+	__disable_irq();	
 	PdOS_sched();
 	__enable_irq();
 
@@ -102,14 +127,29 @@ void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, void *st
 	h->psp = psp;
 
 	tasks[activeTaskNum] = h;
+	if (activeTaskNum > 0U)
+	{
+		// set the new task ready to run
+		readySet |= (1U << (activeTaskNum - 1U));
+	}
 	activeTaskNum++;
 }
 
-//
+// Schedule the next task to run.
 // needs to be called in a critical section
 void PdOS_sched(void)
 {
-	currTaskIndex = (currTaskIndex + 1U < activeTaskNum) ? (currTaskIndex + 1U) : 0U;
+	if (readySet == 0U)
+	{
+		currTaskIndex = 0U;  // idle task
+	}
+	else
+	{
+		do
+		{
+			currTaskIndex = (currTaskIndex + 1U < activeTaskNum) ? (currTaskIndex + 1U) : 1U;
+		} while ((readySet & (1U << (currTaskIndex - 1U))) == 0U);
+	}
 	nextTask = tasks[currTaskIndex];
 
 	if (nextTask != currTask)
@@ -119,8 +159,42 @@ void PdOS_sched(void)
 	}
 }
 
+void PdOS_delay(uint32_t ticks)
+{
+	if (currTask == tasks[0])
+	{
+		return;  // idle task should never be blocked
+	}
+
+	__disable_irq();
+	
+	currTask->timeout = ticks;
+	readySet &= ~(1U << (currTaskIndex - 1U));
+	PdOS_sched();  // switch away from the current task
+
+	__enable_irq();
+}
+
+void PdOS_tick(void)
+{
+	uint8_t i;
+	for (i = 1U; i < activeTaskNum; i++)
+	{
+		if (tasks[i]->timeout > 0)
+		{
+			tasks[i]->timeout--;
+			if (tasks[i]->timeout == 0U)
+			{
+				readySet |= (1U << (i - 1U));
+			}
+		}
+	}
+	// no need to call the scheduler explicitly,
+	// as it is called at the end of every systick
+}
+
 // assembly function for context switch
-__attribute__ ((naked)) void PendSV_Handler(void)
+__attribute__((naked)) void PendSV_Handler(void)
 {
     __asm volatile (
         "  CPSID         I                   \n"  // disable interrupt
@@ -152,5 +226,3 @@ __attribute__ ((naked)) void PendSV_Handler(void)
         "  BX            lr                  \n"
     );
 }
-
-
