@@ -21,6 +21,8 @@
             ((((uint32_t)(prio)) << PENDSV_PRIO_OFFSET) &		\
             PENDSV_PRIO_BITMASK))
 
+#define LOG2(x) (32U - __builtin_clz(x))
+
 #if MAX_TASK_NUM > 32U
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
@@ -30,10 +32,9 @@ extern uint32_t SystemCoreClock;
 PdOSTaskHandle * volatile currTask = NULL;
 PdOSTaskHandle * volatile nextTask = NULL;
 
-static PdOSTaskHandle *tasks[MAX_TASK_NUM + 1U];
+static PdOSTaskHandle *tasks[MAX_TASK_NUM + 1U] = {};
 static uint32_t readySet = 0U;
-uint8_t activeTaskNum = 0;
-uint8_t currTaskIndex = 0;
+static uint32_t blockedSet = 0U;
 
 PdOSTaskHandle idleTaskHandle;
 
@@ -77,7 +78,7 @@ void PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
 	// create the idle task
-	PdOS_create_task(&idleTaskHandle, &idle_task_func, idleStkSto, idleStkSize);
+	PdOS_create_task(&idleTaskHandle, &idle_task_func, 0U, idleStkSto, idleStkSize);
 }
 
 void PdOS_run()
@@ -94,10 +95,10 @@ void PdOS_run()
 	while (1);
 }
 
-void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, void *stkSto, uint32_t stkSize)
+void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize)
 {
 	// ADD ERRNO LATER
-	if (activeTaskNum >= MAX_TASK_NUM)
+	if ((prio >= MAX_TASK_NUM) || (tasks[prio] != NULL))
 	{
 		return;
 	}
@@ -125,14 +126,14 @@ void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, void *st
 	*(--psp) = 0x00000004U;  // R4
 
 	h->psp = psp;
+	tasks[prio] = h;
+	h->prio = prio;
 
-	tasks[activeTaskNum] = h;
-	if (activeTaskNum > 0U)
+	if (prio > 0U)
 	{
 		// set the new task ready to run
-		readySet |= (1U << (activeTaskNum - 1U));
+		readySet |= (1U << (prio - 1U));
 	}
-	activeTaskNum++;
 }
 
 // Schedule the next task to run.
@@ -141,16 +142,12 @@ void PdOS_sched(void)
 {
 	if (readySet == 0U)
 	{
-		currTaskIndex = 0U;  // idle task
+		nextTask = tasks[0];  // idle task
 	}
 	else
 	{
-		do
-		{
-			currTaskIndex = (currTaskIndex + 1U < activeTaskNum) ? (currTaskIndex + 1U) : 1U;
-		} while ((readySet & (1U << (currTaskIndex - 1U))) == 0U);
+		nextTask = tasks[LOG2(readySet)];
 	}
-	nextTask = tasks[currTaskIndex];
 
 	if (nextTask != currTask)
 	{
@@ -161,6 +158,8 @@ void PdOS_sched(void)
 
 void PdOS_delay(uint32_t ticks)
 {
+	uint32_t bitmask;
+
 	if (currTask == tasks[0])
 	{
 		return;  // idle task should never be blocked
@@ -168,8 +167,10 @@ void PdOS_delay(uint32_t ticks)
 
 	__disable_irq();
 	
+	bitmask = 1U << (currTask->prio - 1U);
 	currTask->timeout = ticks;
-	readySet &= ~(1U << (currTaskIndex - 1U));
+	readySet &= ~bitmask;
+	blockedSet |= bitmask;
 	PdOS_sched();  // switch away from the current task
 
 	__enable_irq();
@@ -177,17 +178,20 @@ void PdOS_delay(uint32_t ticks)
 
 void PdOS_tick(void)
 {
-	uint8_t i;
-	for (i = 1U; i < activeTaskNum; i++)
+	PdOSTaskHandle *currH;
+	uint32_t bitmask;
+	uint32_t tmpBlockedSet = blockedSet;
+	while (tmpBlockedSet != 0U)
 	{
-		if (tasks[i]->timeout > 0)
+		currH = tasks[LOG2(tmpBlockedSet)];
+		bitmask = (1U << (currH->prio - 1U));
+		currH->timeout--;
+		if (currH->timeout == 0U)
 		{
-			tasks[i]->timeout--;
-			if (tasks[i]->timeout == 0U)
-			{
-				readySet |= (1U << (i - 1U));
-			}
+			readySet |= bitmask;
+			blockedSet &= ~bitmask;
 		}
+		tmpBlockedSet &= ~bitmask;
 	}
 	// no need to call the scheduler explicitly,
 	// as it is called at the end of every systick

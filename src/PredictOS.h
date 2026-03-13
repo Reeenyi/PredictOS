@@ -18,11 +18,13 @@ typedef struct _PdOSTaskHandle
 {
 	void *psp;  // stack pointer
 	uint32_t timeout;  // delay time down-counter
+	uint8_t prio;  // priority
+	uint8_t preserve[3];  // align by 4 bytes
 } PdOSTaskHandle;
 
 void PdOS_init(void *idleStkSto, uint32_t idleStkSize);
 void PdOS_run(void);
-void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, void *stkSto, uint32_t stkSize);
+void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize);
 void PdOS_sched(void);
 __attribute__((weak)) void PdOS_on_idle(void);
 void PdOS_delay(uint32_t ticks);
