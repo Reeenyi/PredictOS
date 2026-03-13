@@ -73,12 +73,12 @@ void _PdOS_set_systick(void)
 	systick_start(&DRV_SYSTICK);
 }
 
-void PdOS_init(void *idleStkSto, uint32_t idleStkSize)
+PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 {
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
 	// create the idle task
-	PdOS_create_task(&idleTaskHandle, &idle_task_func, 0U, idleStkSto, idleStkSize);
+	return PdOS_create_task(&idleTaskHandle, &idle_task_func, 0U, idleStkSto, idleStkSize);
 }
 
 void PdOS_run()
@@ -95,12 +95,12 @@ void PdOS_run()
 	while (1);
 }
 
-void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize)
+PdOSErrCode PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize)
 {
-	// ADD ERRNO LATER
-	if ((prio >= MAX_TASK_NUM) || (tasks[prio] != NULL))
+	// requires an unique priority no greater than MAX_TASK_NUM
+	if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
 	{
-		return;
+		return PDOS_INVALID_PARAM;
 	}
 
 	// stack top, aligned by 8 bytes
@@ -134,6 +134,8 @@ void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, uint8_t 
 		// set the new task ready to run
 		readySet |= (1U << (prio - 1U));
 	}
+
+	return PDOS_OK;
 }
 
 // Schedule the next task to run.
@@ -160,9 +162,11 @@ void PdOS_delay(uint32_t ticks)
 {
 	uint32_t bitmask;
 
-	if (currTask == tasks[0])
+	// idle task should not be blocked
+	// ticks should not be zero, otherwise underflow will occur
+	if ((currTask == tasks[0]) || (ticks == 0U))
 	{
-		return;  // idle task should never be blocked
+		return;
 	}
 
 	__disable_irq();
