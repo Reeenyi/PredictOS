@@ -21,13 +21,19 @@
             ((((uint32_t)(prio)) << PENDSV_PRIO_OFFSET) &		\
             PENDSV_PRIO_BITMASK))
 
+#define MAX_TASK_NUM (32U)
+
 extern uint32_t SystemCoreClock;
 
 PdOSTaskHandle * volatile currTask = NULL;
 PdOSTaskHandle * volatile nextTask = NULL;
 
+static PdOSTaskHandle *tasks[MAX_TASK_NUM + 1U];
+uint8_t activeTaskNum = 0;
+uint8_t currTaskIndex = 0;
+
 // Callback function for systick. Used privately.
-void __PdOS_systick_callback(systick_driver_t *sdp)
+void _PdOS_systick_callback(systick_driver_t *sdp)
 {
 	(void)sdp;
 	__disable_irq();
@@ -36,12 +42,12 @@ void __PdOS_systick_callback(systick_driver_t *sdp)
 }
 
 // Initialize systick. Used privately.
-void __PdOS_set_systick(void)
+void _PdOS_set_systick(void)
 {
 	systick_init(&DRV_SYSTICK);
 	systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
 	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / 1000U));  // frequency set to 1000Hz
-	systick_set_cb(&DRV_SYSTICK, __PdOS_systick_callback);
+	systick_set_cb(&DRV_SYSTICK, _PdOS_systick_callback);
 	systick_start(&DRV_SYSTICK);
 }
 
@@ -53,11 +59,24 @@ void PdOS_init(void)
 
 void PdOS_run()
 {
-	__PdOS_set_systick();
+	_PdOS_set_systick();
+
+	__disable_irq();
+	PdOS_sched();
+	__enable_irq();
+
+	// the following code should never execute
+	while (1);
 }
 
 void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, void *stkSto, uint32_t stkSize)
 {
+	// ADD ERRNO LATER
+	if (activeTaskNum >= MAX_TASK_NUM)
+	{
+		return;
+	}
+
 	// stack top, aligned by 8 bytes
 	uint32_t *psp = (uint32_t *)((((uint32_t)stkSto + stkSize) / 8) * 8);
 
@@ -81,12 +100,18 @@ void PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, void *st
 	*(--psp) = 0x00000004U;  // R4
 
 	h->psp = psp;
+
+	tasks[activeTaskNum] = h;
+	activeTaskNum++;
 }
 
 //
 // needs to be called in a critical section
 void PdOS_sched(void)
 {
+	currTaskIndex = (currTaskIndex + 1U < activeTaskNum) ? (currTaskIndex + 1U) : 0U;
+	nextTask = tasks[currTaskIndex];
+
 	if (nextTask != currTask)
 	{
 		// trigger the PendSV interrupt

@@ -13,27 +13,27 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-uint32_t blinky1_stack[40];
-PdOSTaskHandle blinky1_handle;
+uint32_t blinky1Stack[40];
+PdOSTaskHandle blinky1Handle;
 void blinky1_func(void)
 {
 	int i;
 	while (1)
 	{
 		gpio_toggle_pin(USER_LED_A);
-		for (i = 0; i < 1e6; i++);
+		for (i = 0; i < 5e5; i++);
 	}
 }
 
-uint32_t blinky2_stack[40];
-PdOSTaskHandle blinky2_handle;
+uint32_t blinky2Stack[40];
+PdOSTaskHandle blinky2Handle;
 void blinky2_func(void)
 {
 	int i;
 	while (1)
 	{
 		gpio_toggle_pin(USER_LED_B);
-		for (i = 0; i < 1e6; i++);
+		for (i = 0; i < 3e5; i++);
 	}
 }
 
@@ -52,13 +52,8 @@ int main(void)
 
 	PdOS_init();
 
-	PdOS_create_task(&blinky1_handle, &blinky1_func, blinky1_stack, sizeof(blinky1_stack));
-	PdOS_create_task(&blinky2_handle, &blinky2_func, blinky2_stack, sizeof(blinky2_stack));
+	PdOS_create_task(&blinky1Handle, &blinky1_func, blinky1Stack, sizeof(blinky1Stack));
+	PdOS_create_task(&blinky2Handle, &blinky2_func, blinky2Stack, sizeof(blinky2Stack));
 
 	PdOS_run();
-
-
-    irq_enable_all();
-
-    while (1);
 }
