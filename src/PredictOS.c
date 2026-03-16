@@ -27,15 +27,27 @@
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
 
+// Task Control Block
+struct PdOSTaskControlBlock
+{
+	void *psp;  // stack pointer
+	uint32_t timeout;  // delay time down-counter
+	uint8_t prio;  // priority
+	uint8_t preserve[3];  // align by 4 bytes
+};
+
 extern uint32_t SystemCoreClock;
 
-static PdOSTaskHandle * volatile currTask = NULL;
-static PdOSTaskHandle * volatile nextTask = NULL;
-static PdOSTaskHandle *tasks[MAX_TASK_NUM + 1U] = {};
+static volatile PdOSTaskHandle currTask = NULL;
+static volatile PdOSTaskHandle nextTask = NULL;
+static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
 static uint32_t readySet = 0U;
 static uint32_t blockedSet = 0U;
 
-static PdOSTaskHandle idleTaskHandle;
+// default weak function on idle
+__attribute__((weak)) void PdOS_on_idle(void)
+{
+}
 
 static void idle_task_func(void)
 {
@@ -45,68 +57,45 @@ static void idle_task_func(void)
 	}
 }
 
-__attribute__((weak)) void PdOS_on_idle(void)
-{
-	// default weak function
-}
-
-static void PdOS_tick(void);
-static void PdOS_sched(void);
-
-// Callback function for systick. Used privately.
-static void PdOS_systick_callback(systick_driver_t *sdp)
-{
-	(void)sdp;
-	PdOS_tick();
-	__disable_irq();
-	PdOS_sched();
-	__enable_irq();
-}
-
-// Initialize systick. Used privately.
-static void PdOS_set_systick(void)
-{
-	systick_init(&DRV_SYSTICK);
-	systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
-	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));  // frequency set to 1000Hz
-	systick_set_cb(&DRV_SYSTICK, PdOS_systick_callback);
-	systick_start(&DRV_SYSTICK);
-}
-
 PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 {
+	PdOSTaskHandle idleTaskHandle;
+
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
 	// create the idle task
-	return PdOS_create_task(&idleTaskHandle, &idle_task_func, 0U, idleStkSto, idleStkSize);
+	idleTaskHandle = PdOS_create_task(&idle_task_func, 0U, idleStkSto, idleStkSize);
+	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
 }
 
-void PdOS_run()
+// Create a new task and return its handle.
+// Return NULL on failure.
+PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize)
 {
-	PdOS_set_systick();
+	PdOSTaskHandle h;
+	uint32_t *psp;
 
-	// call the scheduler explicitly
-	// to transfer control to the RTOS
-	__disable_irq();	
-	PdOS_sched();
-	__enable_irq();
-
-	// the following code should never execute
-	while (1);
-}
-
-PdOSErrCode PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize)
-{
 	// requires an unique priority no greater than MAX_TASK_NUM
 	if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
 	{
-		return PDOS_INVALID_PARAM;
+		return NULL;
 	}
 
-	// stack top, aligned by 8 bytes
-	uint32_t *psp = (uint32_t *)((((uint32_t)stkSto + stkSize) / 8) * 8);
+	/* stack usage:
+		+-----------------------------+  <-- stack top (stkSto + stkSize)
+		|  hardware-stacked registers |
+		|   software-saved registers  |  <-- stack frame, grows downward
+		+ - - - - - - - - - - - - - - +
+		|         free space          |
+		+ - - - - - - - - - - - - - - +  
+		|      task control block     |  <-- TCB stored at the bottom
+		+-----------------------------+  <-- stack bottom (stkSto)
+	 */
 
-	// stack frame, corresponds to ARMv7-M
+	// stack top, aligned by 8 bytes
+	psp = (uint32_t *)(((uint32_t)stkSto + stkSize) & ~7U);
+
+	// hardware-stacked registers, corresponds to ARMv7-M
 	*(--psp) = (1U << 24);  // xPSR, THUMB bit set
 	*(--psp) = (uint32_t)taskFunction;  // PC
 	*(--psp) = 0x0000000EU;  // LR
@@ -115,7 +104,7 @@ PdOSErrCode PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, u
 	*(--psp) = 0x00000002U;  // R2
 	*(--psp) = 0x00000001U;  // R1
 	*(--psp) = 0x00000000U;  // R0
-	// additional registers
+	// software-saved registers
 	*(--psp) = 0x0000000BU;  // R11
 	*(--psp) = 0x0000000AU;  // R10
 	*(--psp) = 0x00000009U;  // R9
@@ -125,9 +114,14 @@ PdOSErrCode PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, u
 	*(--psp) = 0x00000005U;  // R5
 	*(--psp) = 0x00000004U;  // R4
 
+	// TCB is stored at the stack bottom
+	h = (PdOSTaskHandle)stkSto;
+
 	h->psp = psp;
-	tasks[prio] = h;
 	h->prio = prio;
+	h->timeout = 0U;
+	
+	tasks[prio] = h;
 
 	if (prio > 0U)
 	{
@@ -135,11 +129,11 @@ PdOSErrCode PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, u
 		readySet |= (1U << (prio - 1U));
 	}
 
-	return PDOS_OK;
+	return h;
 }
 
 // Schedule the next task to run.
-// needs to be called in a critical section
+// Needs to be called in a critical section.
 static void PdOS_sched(void)
 {
 	if (readySet == 0U)
@@ -180,17 +174,18 @@ void PdOS_delay(uint32_t ticks)
 	__enable_irq();
 }
 
-void PdOS_tick(void)
+static void PdOS_tick(void)
 {
-	PdOSTaskHandle *currH;
+	PdOSTaskHandle h;
 	uint32_t bitmask;
 	uint32_t tmpBlockedSet = blockedSet;
+	
 	while (tmpBlockedSet != 0U)
 	{
-		currH = tasks[LOG2(tmpBlockedSet)];
-		bitmask = (1U << (currH->prio - 1U));
-		currH->timeout--;
-		if (currH->timeout == 0U)
+		h = tasks[LOG2(tmpBlockedSet)];
+		bitmask = (1U << (h->prio - 1U));
+		h->timeout--;
+		if (h->timeout == 0U)
 		{
 			readySet |= bitmask;
 			blockedSet &= ~bitmask;
@@ -199,6 +194,40 @@ void PdOS_tick(void)
 	}
 	// no need to call the scheduler explicitly,
 	// as it is called at the end of every systick
+}
+
+// Callback function for systick.
+static void PdOS_systick_callback(systick_driver_t *sdp)
+{
+	(void)sdp;
+	PdOS_tick();
+	__disable_irq();
+	PdOS_sched();
+	__enable_irq();
+}
+
+// Initialize systick.
+static void PdOS_set_systick(void)
+{
+	systick_init(&DRV_SYSTICK);
+	systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
+	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));  // frequency set to 1000Hz
+	systick_set_cb(&DRV_SYSTICK, PdOS_systick_callback);
+	systick_start(&DRV_SYSTICK);
+}
+
+void PdOS_run()
+{
+	PdOS_set_systick();
+
+	// call the scheduler explicitly
+	// to transfer control to the RTOS
+	__disable_irq();	
+	PdOS_sched();
+	__enable_irq();
+
+	// the following code should never execute
+	while (1);
 }
 
 // assembly function for context switch

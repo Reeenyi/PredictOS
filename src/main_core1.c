@@ -49,8 +49,8 @@ int main(void)
 
 	PdOS_init(idleTaskStack, sizeof(idleTaskStack));
 
-	PdOS_create_task(&blinky1Handle, &blinky1_func, 5U, blinky1Stack, sizeof(blinky1Stack));
-	PdOS_create_task(&blinky2Handle, &blinky2_func, 2U, blinky2Stack, sizeof(blinky2Stack));
+	blinky1Handle = PdOS_create_task(&blinky1_func, 5U, blinky1Stack, sizeof(blinky1Stack));
+	blinky2Handle = PdOS_create_task(&blinky2_func, 2U, blinky2Stack, sizeof(blinky2Stack));
 
 	PdOS_run();
 }
