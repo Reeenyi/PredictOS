@@ -32,8 +32,7 @@ typedef struct _PdOSTaskHandle
 PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize);
 void PdOS_run(void);
 PdOSErrCode PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize);
-void PdOS_sched(void);
-__attribute__((weak)) void PdOS_on_idle(void);
+void PdOS_on_idle(void);
 void PdOS_delay(uint32_t ticks);
 
 #endif /* SRC_PREDICTOS_H_ */

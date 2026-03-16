@@ -29,16 +29,15 @@
 
 extern uint32_t SystemCoreClock;
 
-PdOSTaskHandle * volatile currTask = NULL;
-PdOSTaskHandle * volatile nextTask = NULL;
-
+static PdOSTaskHandle * volatile currTask = NULL;
+static PdOSTaskHandle * volatile nextTask = NULL;
 static PdOSTaskHandle *tasks[MAX_TASK_NUM + 1U] = {};
 static uint32_t readySet = 0U;
 static uint32_t blockedSet = 0U;
 
-PdOSTaskHandle idleTaskHandle;
+static PdOSTaskHandle idleTaskHandle;
 
-void idle_task_func(void)
+static void idle_task_func(void)
 {
 	while (1)
 	{
@@ -51,10 +50,11 @@ __attribute__((weak)) void PdOS_on_idle(void)
 	// default weak function
 }
 
-void PdOS_tick(void);
+static void PdOS_tick(void);
+static void PdOS_sched(void);
 
 // Callback function for systick. Used privately.
-void _PdOS_systick_callback(systick_driver_t *sdp)
+static void PdOS_systick_callback(systick_driver_t *sdp)
 {
 	(void)sdp;
 	PdOS_tick();
@@ -64,12 +64,12 @@ void _PdOS_systick_callback(systick_driver_t *sdp)
 }
 
 // Initialize systick. Used privately.
-void _PdOS_set_systick(void)
+static void PdOS_set_systick(void)
 {
 	systick_init(&DRV_SYSTICK);
 	systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
 	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));  // frequency set to 1000Hz
-	systick_set_cb(&DRV_SYSTICK, _PdOS_systick_callback);
+	systick_set_cb(&DRV_SYSTICK, PdOS_systick_callback);
 	systick_start(&DRV_SYSTICK);
 }
 
@@ -83,7 +83,7 @@ PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 
 void PdOS_run()
 {
-	_PdOS_set_systick();
+	PdOS_set_systick();
 
 	// call the scheduler explicitly
 	// to transfer control to the RTOS
@@ -140,7 +140,7 @@ PdOSErrCode PdOS_create_task(PdOSTaskHandle *h, PdOSTaskFunction taskFunction, u
 
 // Schedule the next task to run.
 // needs to be called in a critical section
-void PdOS_sched(void)
+static void PdOS_sched(void)
 {
 	if (readySet == 0U)
 	{
