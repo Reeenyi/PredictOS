@@ -25,6 +25,7 @@ typedef void (*PdOSTaskFunction)(void);
 typedef struct PdOSTaskControlBlock *PdOSTaskHandle;
 
 void PdOS_on_idle(void);  // weak function to overwrite
+// stack size needs to be at least 64 bytes (16 words)
 PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize);
 PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize);
 void PdOS_run(void);

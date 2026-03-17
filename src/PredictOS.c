@@ -30,17 +30,18 @@
 // Task Control Block
 struct PdOSTaskControlBlock
 {
-	void *psp;  // stack pointer
-	uint32_t timeout;  // delay time down-counter
-	uint8_t prio;  // priority
+	void *psp;            // stack pointer
+	uint32_t timeout;     // delay time down-counter
+	uint8_t prio;         // priority
 	uint8_t preserve[3];  // align by 4 bytes
 };
 
 extern uint32_t SystemCoreClock;
 
+static struct PdOSTaskControlBlock tcbPool[MAX_TASK_NUM + 1U] = {};
+static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
 static volatile PdOSTaskHandle currTask = NULL;
 static volatile PdOSTaskHandle nextTask = NULL;
-static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
 static uint32_t readySet = 0U;
 static uint32_t blockedSet = 0U;
 
@@ -75,22 +76,17 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 	PdOSTaskHandle h;
 	uint32_t *psp;
 
+	// stack size needs to be at least 64 bytes to store one frame
+	if ((stkSto == NULL) || (stkSize < 64U))
+	{
+		return NULL;
+	}
+
 	// requires an unique priority no greater than MAX_TASK_NUM
 	if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
 	{
 		return NULL;
 	}
-
-	/* stack usage:
-		+-----------------------------+  <-- stack top (stkSto + stkSize)
-		|  hardware-stacked registers |
-		|   software-saved registers  |  <-- stack frame, grows downward
-		+ - - - - - - - - - - - - - - +
-		|         free space          |
-		+ - - - - - - - - - - - - - - +  
-		|      task control block     |  <-- TCB stored at the bottom
-		+-----------------------------+  <-- stack bottom (stkSto)
-	 */
 
 	// stack top, aligned by 8 bytes
 	psp = (uint32_t *)(((uint32_t)stkSto + stkSize) & ~7U);
@@ -114,8 +110,8 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 	*(--psp) = 0x00000005U;  // R5
 	*(--psp) = 0x00000004U;  // R4
 
-	// TCB is stored at the stack bottom
-	h = (PdOSTaskHandle)stkSto;
+	// save TCB to pool
+	h = &tcbPool[prio];
 
 	h->psp = psp;
 	h->prio = prio;
@@ -230,7 +226,7 @@ void PdOS_run()
 	while (1);
 }
 
-// assembly function for context switch
+// Assembly function for context switch.
 __attribute__((naked)) void PendSV_Handler(void)
 {
     __asm volatile (

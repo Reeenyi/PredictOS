@@ -1,9 +1,9 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-uint32_t idleTaskStack[40];
-uint32_t blinky1Stack[40];
-uint32_t blinky2Stack[40];
+uint32_t idleTaskStack[32];
+uint32_t blinky1Stack[32];
+uint32_t blinky2Stack[32];
 
 PdOSTaskHandle blinky1Handle;
 PdOSTaskHandle blinky2Handle;
