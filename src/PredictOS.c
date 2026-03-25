@@ -46,11 +46,12 @@ static uint32_t readySet = 0U;
 static uint32_t blockedSet = 0U;
 static volatile uint32_t systime = 0U;
 
-// default weak function on idle
+// Default weak function on idle.
 __attribute__((weak)) void PdOS_on_idle(void)
 {
 }
 
+// Idle task function.
 static void PdOS_idle_task_func(void)
 {
 	while (1)
@@ -59,6 +60,7 @@ static void PdOS_idle_task_func(void)
 	}
 }
 
+// Initialize OS.
 PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 {
 	PdOSTaskHandle idleTaskHandle;
@@ -149,15 +151,18 @@ static void PdOS_sched(void)
 	}
 }
 
+// Get current system time.
 uint32_t PdOS_get_systime(void)
 {
 	return systime;
 }
 
+// Block current task and switch away.
+// Needs to be called in a critical section.
 static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 {
 	uint32_t bitmask;
-	
+
 	bitmask = 1U << (currTask->prio - 1U);
 	currTask->wkUpTime = nextWkUpTime;
 	readySet &= ~bitmask;
@@ -165,6 +170,7 @@ static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 	PdOS_sched();  // switch away from the current task
 }
 
+// Delay for a relative time.
 void PdOS_delay(uint32_t ticks)
 {
 	// idle task should not be blocked
@@ -179,6 +185,7 @@ void PdOS_delay(uint32_t ticks)
 	__enable_irq();
 }
 
+// Delay until a specific absolute time.
 void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
 {
 	uint32_t nextWkUpTime;
@@ -206,6 +213,7 @@ void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
 	__enable_irq();
 }
 
+// Maintain systime and ready/blocked set
 static void PdOS_tick(void)
 {
 	PdOSTaskHandle h;
@@ -227,6 +235,7 @@ static void PdOS_tick(void)
 		}
 		tmpBlockedSet &= ~bitmask;
 	}
+	
 	// no need to call the scheduler explicitly,
 	// as it is called at the end of every systick
 }
@@ -251,6 +260,7 @@ static void PdOS_set_systick(void)
 	systick_start(&DRV_SYSTICK);
 }
 
+// Set OS to run.
 void PdOS_run()
 {
 	PdOS_set_systick();
