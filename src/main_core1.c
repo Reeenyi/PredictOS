@@ -11,26 +11,30 @@ PdOSTaskHandle blinky2Handle;
 void blinky1_func(void)
 {
 	uint32_t i;
+	uint32_t prevWkUpTime = PdOS_get_systime();
+
 	while (1)
 	{
-		for (i = 0U; i < 1500U; i++)
+		for (i = 0U; i < 1000U; i++)
 		{
 			gpio_toggle_pin(USER_LED_A);
 		}
-		PdOS_delay(1);
+		PdOS_delayUntil(&prevWkUpTime, 1);
 	}
 }
 
 void blinky2_func(void)
 {
 	uint32_t i;
+	uint32_t prevWkUpTime = PdOS_get_systime();
+
 	while (1)
 	{
-		for (i = 0U; i < 4500U; i++)
+		for (i = 0U; i < 3000U; i++)
 		{
 			gpio_toggle_pin(USER_LED_B);
 		}
-		PdOS_delay(50);
+		PdOS_delayUntil(&prevWkUpTime, 50);
 	}
 }
 

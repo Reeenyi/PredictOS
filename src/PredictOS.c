@@ -51,7 +51,7 @@ __attribute__((weak)) void PdOS_on_idle(void)
 {
 }
 
-static void idle_task_func(void)
+static void PdOS_idle_task_func(void)
 {
 	while (1)
 	{
@@ -66,7 +66,7 @@ PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
 	// create the idle task
-	idleTaskHandle = PdOS_create_task(&idle_task_func, 0U, idleStkSto, idleStkSize);
+	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleStkSto, idleStkSize);
 	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
 }
 
@@ -149,10 +149,24 @@ static void PdOS_sched(void)
 	}
 }
 
-void PdOS_delay(uint32_t ticks)
+uint32_t PdOS_get_systime(void)
+{
+	return systime;
+}
+
+static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 {
 	uint32_t bitmask;
+	
+	bitmask = 1U << (currTask->prio - 1U);
+	currTask->wkUpTime = nextWkUpTime;
+	readySet &= ~bitmask;
+	blockedSet |= bitmask;
+	PdOS_sched();  // switch away from the current task
+}
 
+void PdOS_delay(uint32_t ticks)
+{
 	// idle task should not be blocked
 	// ticks should not be zero, otherwise underflow will occur
 	if ((currTask == tasks[0]) || (ticks == 0U))
@@ -161,12 +175,33 @@ void PdOS_delay(uint32_t ticks)
 	}
 
 	__disable_irq();
+	PdOS_block_curr_task(systime + ticks);
+	__enable_irq();
+}
+
+void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
+{
+	uint32_t nextWkUpTime;
+
+	// handle illegal cases
+	if ((currTask == tasks[0]) || (period == 0U) || (prevWkUpTime == NULL))
+	{
+		return;
+	}
+
+	__disable_irq();
+
+	nextWkUpTime = *prevWkUpTime + period;
+	*prevWkUpTime = nextWkUpTime;
+
+	// deadline already missed
+	if ((int32_t)(systime - nextWkUpTime) >= 0)
+	{
+		__enable_irq();
+		return;
+	}
 	
-	bitmask = 1U << (currTask->prio - 1U);
-	currTask->wkUpTime = systime + ticks;
-	readySet &= ~bitmask;
-	blockedSet |= bitmask;
-	PdOS_sched();  // switch away from the current task
+	PdOS_block_curr_task(nextWkUpTime);
 
 	__enable_irq();
 }
