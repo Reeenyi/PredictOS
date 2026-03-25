@@ -31,7 +31,7 @@
 struct PdOSTaskControlBlock
 {
 	void *psp;            // stack pointer
-	uint32_t timeout;     // delay time down-counter
+	uint32_t wkUpTime;    // next wake up time
 	uint8_t prio;         // priority
 	uint8_t preserve[3];  // align by 4 bytes
 };
@@ -44,6 +44,7 @@ static volatile PdOSTaskHandle currTask = NULL;
 static volatile PdOSTaskHandle nextTask = NULL;
 static uint32_t readySet = 0U;
 static uint32_t blockedSet = 0U;
+static volatile uint32_t systime = 0U;
 
 // default weak function on idle
 __attribute__((weak)) void PdOS_on_idle(void)
@@ -115,7 +116,7 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 
 	h->psp = psp;
 	h->prio = prio;
-	h->timeout = 0U;
+	h->wkUpTime = 0U;
 	
 	tasks[prio] = h;
 
@@ -162,7 +163,7 @@ void PdOS_delay(uint32_t ticks)
 	__disable_irq();
 	
 	bitmask = 1U << (currTask->prio - 1U);
-	currTask->timeout = ticks;
+	currTask->wkUpTime = systime + ticks;
 	readySet &= ~bitmask;
 	blockedSet |= bitmask;
 	PdOS_sched();  // switch away from the current task
@@ -175,13 +176,16 @@ static void PdOS_tick(void)
 	PdOSTaskHandle h;
 	uint32_t bitmask;
 	uint32_t tmpBlockedSet = blockedSet;
+
+	systime++;
 	
 	while (tmpBlockedSet != 0U)
 	{
 		h = tasks[LOG2(tmpBlockedSet)];
 		bitmask = (1U << (h->prio - 1U));
-		h->timeout--;
-		if (h->timeout == 0U)
+
+		// convert to signed integer to handle systime overflow
+		if ((int32_t)(systime - h->wkUpTime) >= 0)
 		{
 			readySet |= bitmask;
 			blockedSet &= ~bitmask;
