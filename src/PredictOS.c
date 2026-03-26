@@ -38,13 +38,14 @@ struct PdOSTaskControlBlock
 
 extern uint32_t SystemCoreClock;
 
-static struct PdOSTaskControlBlock tcbPool[MAX_TASK_NUM + 1U] = {};
-static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
-static volatile PdOSTaskHandle currTask = NULL;
-static volatile PdOSTaskHandle nextTask = NULL;
-static uint32_t readySet = 0U;
-static uint32_t blockedSet = 0U;
-static volatile uint32_t systime = 0U;
+// all these variables should be placed in DTCM
+PDOS_DTCM static struct PdOSTaskControlBlock tcbPool[MAX_TASK_NUM + 1U] = {};
+PDOS_DTCM static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
+PDOS_DTCM static volatile PdOSTaskHandle currTask = NULL;
+PDOS_DTCM static volatile PdOSTaskHandle nextTask = NULL;
+PDOS_DTCM static uint32_t readySet = 0U;
+PDOS_DTCM static uint32_t blockedSet = 0U;
+PDOS_DTCM static volatile uint32_t systime = 0U;
 
 // Default weak function on idle.
 __attribute__((weak)) void PdOS_on_idle(void)

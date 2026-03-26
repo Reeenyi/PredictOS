@@ -1,14 +1,14 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-uint32_t idleTaskStack[32];
-uint32_t blinky1Stack[32];
-uint32_t blinky2Stack[32];
+PDOS_DTCM uint32_t idleTaskStack[32];
+PDOS_DTCM uint32_t blinky1Stack[32];
+PDOS_DTCM uint32_t blinky2Stack[32];
 
 PdOSTaskHandle blinky1Handle;
 PdOSTaskHandle blinky2Handle;
 
-void blinky1_func(void)
+PDOS_ITCM void blinky1_func(void)
 {
 	uint32_t i;
 	uint32_t prevWkUpTime = PdOS_get_systime();
@@ -23,7 +23,7 @@ void blinky1_func(void)
 	}
 }
 
-void blinky2_func(void)
+PDOS_ITCM void blinky2_func(void)
 {
 	uint32_t i;
 	uint32_t prevWkUpTime = PdOS_get_systime();

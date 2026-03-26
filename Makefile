@@ -65,6 +65,13 @@ C_INCS += \
 	src/PredictOS.h
 
 ################################################################################
+# Linker file
+################################################################################
+
+# Linker file
+LINKER_SCRIPT_SOURCE := PredictOS-linker-script-gcc-m7.ld.E
+
+################################################################################
 # Include 'Stellar SDK' top level makefile
 ################################################################################
 include $(STELLAR_E_SDK_BUILD_SYSTEM_DIR)/StellarESDK.mk

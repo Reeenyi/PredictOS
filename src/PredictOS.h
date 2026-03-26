@@ -5,6 +5,11 @@
 #ifndef SRC_PREDICTOS_H_
 #define SRC_PREDICTOS_H_
 
+// Place in ITCM. Applies to functions.
+#define PDOS_ITCM __attribute__((section(".itcm")))
+// Place in DTCM. Applies to variables.
+#define PDOS_DTCM __attribute__((section(".dtcm")))
+
 typedef enum
 {
 	PDOS_OK = 0U,
