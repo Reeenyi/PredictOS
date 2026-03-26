@@ -21,7 +21,7 @@ SECTIONS
 {
     startup : ALIGN(16) SUBALIGN(1024)
     {
-        KEEP(*(.vectors))
+        /* KEEP(*(.vectors)) deleted. vector table loaded to .itcm instead of startup */
         KEEP(*(.reset_handler))
     } > EMBED_NVM
 
@@ -44,27 +44,11 @@ SECTIONS
     } > EMBED_NVM
 
 
-    /* 
-        Move the .itcm section before .text to ensure SYSTICK and PredictOS
-        are placed in ITCM instead of the default .text section.
-    */
-    .itcm ORIGIN(EMBED_ITCM) : ALIGN(16)
-    {
-        __itcm__ = . ;
-        *systick*.o(.text*)
-        *PredictOS*.o(.text*)
-    } > EMBED_ITCM AT> EMBED_NVM
-    __itcm_start__ = ORIGIN(EMBED_ITCM);
-    __itcm_len__   = LENGTH(EMBED_ITCM);
-    __itcm_end__   = __itcm_start__ + __itcm_len__;
-    __itcm_size__  = SIZEOF(.itcm);
-    __itcm_load__  = LOADADDR(.itcm);
-
-
     .text : ALIGN(16) SUBALIGN(16)
     {
-        *(.text)
-        *(.text.*)
+        /* exclude SYSTICK and PredictOS from the default .text section */
+        *(EXCLUDE_FILE(*systick*.o *PredictOS*.o) .text)
+        *(EXCLUDE_FILE(*systick*.o *PredictOS*.o) .text.*)
         *(.rodata)
         *(.rodata.*)
         *(.glue_7t)
@@ -97,6 +81,25 @@ SECTIONS
     {
         *(.eh_frame)
     } > EMBED_NVM
+
+
+    /* section .ictm needs to start at offset 0 for alignment of the vector table */
+    .itcm ORIGIN(EMBED_ITCM) : ALIGN(16)
+    {
+        __itcm__ = . ;
+
+        /* place the vector table at the beginning of ITCM for alignment */
+        KEEP(*(.vectors))
+
+        /* place SYSTICK and PredictOS in ITCM */
+        *systick*.o(.text*)
+        *PredictOS*.o(.text*)
+    } > EMBED_ITCM AT> EMBED_NVM
+    __itcm_start__ = ORIGIN(EMBED_ITCM);
+    __itcm_len__   = LENGTH(EMBED_ITCM);
+    __itcm_end__   = __itcm_start__ + __itcm_len__;
+    __itcm_size__  = SIZEOF(.itcm);
+    __itcm_load__  = LOADADDR(.itcm);
 
 
     .dtcm ORIGIN(EMBED_DTCM) : ALIGN(4)
@@ -135,10 +138,7 @@ SECTIONS
     } > EMBED_RAM
 
 
-    /*
-        Set MSP to EMBED_DTCM instead of EMBED_RAM to make
-        interrupt stacks stay in core-local memory.
-    */
+    
     .mstack (NOLOAD) :
     {
         . = ALIGN(8);
@@ -146,7 +146,8 @@ SECTIONS
         . += MAIN_STACK_SIZE;
         . = ALIGN(8);
         __main_stack_end__ = .;
-    } > EMBED_DTCM
+    } > EMBED_DTCM  /* Set MSP to EMBED_DTCM instead of EMBED_RAM to make
+                       interrupt stacks stay in core-local memory. */
 
 
     .pstack (NOLOAD) :
