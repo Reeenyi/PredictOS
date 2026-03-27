@@ -1,3 +1,17 @@
+# Predict OS
+This repository contains the implementation for the master's thesis titled *Implementation and Evaluation of Preemptive Three-Phase Tasks on COTS Platform*.
+
+Environment:
+
+- Target platform: STM Stellar SR5E1E7 with EVBE7000E extension board  
+- IDE: StellarStudio 7.0.0  
+- SDK: StellarESDK-1.7.0  
+
+This repository corresponds to the `workspace` directory of StellarStudio.
+
+The following parts explain the non-code part of the project that may be confusing.
+
+
 ## Makefile
 ### Disable FPU
 Add parameter `CONFIG_FPU=no` to disable the floating-point unit.
@@ -15,7 +29,7 @@ $(AT)$(MAKE) CONFIG_TARGET_CORE=core1 CONFIG_TARGET_MEMORY=nvm default-all CONFI
 
 ### Use custom linker script
 
-We use a custom linker scripy `PredictOS-linker-script-gcc-m7.ld.E` to handle the usage of ITCM and DTCM.
+We use a custom linker script `PredictOS-linker-script-gcc-m7.ld.E` to handle the usage of ITCM and DTCM.
 Modify the makefile to use it.
 
 *Add:*
@@ -61,14 +75,14 @@ RTOS kernel utilizes interrupts to operate. Set MSP to DTCM to make interrupt st
 `Systick_Handler` is frequently used in the RTOS kernel and needs to run in ITCM to avoid contention for shared memory.
 However, `Systick_Handler` is implemented in the `SYSTICK` driver of the SDK, so we need to place the driver into ITCM, together with `PredictOS`.
 
-We move them from the default `.text` section to `.ictm` to do so.
+We move them from the default `.text` section to `.itcm` to do so.
 
 #### Place interrupt vector table in Instruction TCM
 
 The interrupt vector is placed in main memory by default.
 We need to place it in ICTM to avoid contention for shared memory when interrupts occur.
 
-We delete `KEEP(*(.vectors))` in section `startup`, and place it in `.ictm` instead.
+We delete `KEEP(*(.vectors))` in section `startup`, and place it in `.itcm` instead.
 `KEEP(*(.reset_handler))` in section `startup` must not be replaced.
 
 
@@ -150,4 +164,4 @@ __itcm_load__  = LOADADDR(.itcm);
 ### SDK
 
 It is very proud to say that we have avoided modifications on the SDK.
-It was an alternative to modify `vector.S` and `SYSTICK` driver in the SDK, but we managed to fix the issue by customizing the linker file.
+It was an alternative to modify `vector.S` and `SYSTICK` driver in the SDK, but we managed to fix the issue by customizing the linker script.
