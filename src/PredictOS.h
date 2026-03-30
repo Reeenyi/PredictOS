@@ -23,6 +23,9 @@ typedef enum
 // systick frequency
 #define TICKS_PER_SECOND (1000U)
 
+// fully preemptive / fully non-preemptive
+#define ALLOW_PREEMPTION (1U)
+
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);
 

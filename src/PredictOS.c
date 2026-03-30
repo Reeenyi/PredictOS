@@ -47,32 +47,6 @@ PDOS_DTCM static uint32_t readySet = 0U;
 PDOS_DTCM static uint32_t blockedSet = 0U;
 PDOS_DTCM static volatile uint32_t systime = 0U;
 
-// Default weak function on idle.
-__attribute__((weak)) void PdOS_on_idle(void)
-{
-}
-
-// Idle task function.
-static void PdOS_idle_task_func(void)
-{
-	while (1)
-	{
-		PdOS_on_idle();
-	}
-}
-
-// Initialize OS.
-PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
-{
-	PdOSTaskHandle idleTaskHandle;
-
-	// set PendSV priority to 0xFF
-	SET_PENDSV_PRIO(0xFFU);
-	// create the idle task
-	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleStkSto, idleStkSize);
-	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
-}
-
 // Create a new task and return its handle.
 // Return NULL on failure.
 PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize)
@@ -150,6 +124,39 @@ static void PdOS_sched(void)
 		// trigger the PendSV interrupt
 		ICSR_REG |= PENDSVSET_BITMASK;
 	}
+}
+
+// Default weak function on idle.
+__attribute__((weak)) void PdOS_on_idle(void)
+{
+}
+
+// Idle task function.
+static void PdOS_idle_task_func(void)
+{
+	while (1)
+	{
+		PdOS_on_idle();
+		// yield CPU when executing non-preemptively
+		if (readySet != 0U)
+		{
+			__disable_irq();
+			PdOS_sched();
+			__enable_irq();
+		}
+	}
+}
+
+// Initialize OS.
+PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
+{
+	PdOSTaskHandle idleTaskHandle;
+
+	// set PendSV priority to 0xFF
+	SET_PENDSV_PRIO(0xFFU);
+	// create the idle task
+	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleStkSto, idleStkSize);
+	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
 }
 
 // Get current system time.
@@ -246,9 +253,13 @@ static void PdOS_systick_callback(systick_driver_t *sdp)
 {
 	(void)sdp;
 	PdOS_tick();
+
+#if ALLOW_PREEMPTION == 1U
 	__disable_irq();
 	PdOS_sched();
 	__enable_irq();
+#endif
+
 }
 
 // Initialize systick.
