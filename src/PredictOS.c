@@ -5,6 +5,7 @@
 #include <test_env.h>
 #include "systick.h"
 #include "PredictOS.h"
+#include <string.h>
 
 #define ICSR_ADDR (0xE000ED04U)
 #define ICSR_REG (*((volatile uint32_t *)ICSR_ADDR))
@@ -34,6 +35,8 @@ struct PdOSTaskControlBlock
 	uint32_t wkUpTime;    // next wake up time
 	uint8_t prio;         // priority
 	uint8_t preserve[3];  // align by 4 bytes
+	uint32_t memStartIndex;
+	uint32_t memSize;
 };
 
 extern uint32_t SystemCoreClock;
@@ -47,9 +50,27 @@ PDOS_DTCM static uint32_t readySet = 0U;
 PDOS_DTCM static uint32_t blockedSet = 0U;
 PDOS_DTCM static volatile uint32_t systime = 0U;
 
+static uint8_t memPool[MEM_POOL_SIZE];
+PDOS_DTCM static uint32_t freeMemIndex = 0U;
+PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];
+
+// circular buffer for log storage
+static uint32_t logBuffer[MAX_LOG_NUM * 2] = {};
+PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2] = {};
+PDOS_DTCM static uint32_t logIndex = 0U;
+
+// log format:
+//	systime(32 bits) - 0(16 bits) - prio(8 bits) - event(8 bits)
+void PdOS_add_log(PdOSLogEventType logEvent)
+{
+	localLogBuffer[logIndex * 2] = systime;
+	localLogBuffer[logIndex * 2 + 1] = (uint32_t)((currTask->prio << 8) | ((uint8_t)logEvent));
+	logIndex = (logIndex + 1 < MAX_LOG_NUM) ? (logIndex + 1) : 0;
+}
+
 // Create a new task and return its handle.
 // Return NULL on failure.
-PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize)
+PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize, uint32_t memSize)
 {
 	PdOSTaskHandle h;
 	uint32_t *psp;
@@ -62,6 +83,12 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 
 	// requires an unique priority no greater than MAX_TASK_NUM
 	if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
+	{
+		return NULL;
+	}
+
+	// ensure enough memory space
+	if ((memSize > MAX_LOCAL_MEM_SIZE) || (freeMemIndex + memSize > MEM_POOL_SIZE))
 	{
 		return NULL;
 	}
@@ -94,6 +121,11 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 	h->psp = psp;
 	h->prio = prio;
 	h->wkUpTime = 0U;
+
+	// allocate space in main memory
+	h->memSize = memSize;
+	h->memStartIndex = freeMemIndex;
+	freeMemIndex += memSize;
 	
 	tasks[prio] = h;
 
@@ -155,7 +187,7 @@ PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
 	// create the idle task
-	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleStkSto, idleStkSize);
+	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleStkSto, idleStkSize, 0U);
 	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
 }
 
@@ -176,6 +208,15 @@ static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 	readySet &= ~bitmask;
 	blockedSet |= bitmask;
 	PdOS_sched();  // switch away from the current task
+}
+
+void PdOS_busy_wait(uint32_t ticks)
+{
+	uint32_t releaseTime = systime + ticks;
+	while ((int32_t)(releaseTime - systime) >= 0)
+	{
+		/* busy wait */
+	}
 }
 
 // Delay for a relative time.
@@ -285,6 +326,26 @@ void PdOS_run()
 
 	// the following code should never execute
 	while (1);
+}
+
+void *PdOS_get_local_mem_addr(void)
+{
+	// task always operates on core-local memory
+	return (void *)localMem;
+}
+
+// Copy data from main memory to core-local memory.
+void PdOS_read(void)
+{
+	memcpy((void *)localMem, (void *)&memPool[currTask->memStartIndex], currTask->memSize);
+}
+
+// Copy data from core-local memory back to main memory.
+void PdOS_write(void)
+{
+	memcpy((void *)&memPool[currTask->memStartIndex], (void *)localMem, currTask->memSize);
+	// also copy log to main memory in WRITE phase
+	memcpy((void *)logBuffer, (void *)localLogBuffer, sizeof(localLogBuffer));
 }
 
 // Assembly function for context switch.
