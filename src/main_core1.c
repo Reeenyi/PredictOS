@@ -1,3 +1,9 @@
+/**
+ * @file main_core1.c
+ * @author Yi Ren
+ * @brief Application code for core 1
+ */
+
 #include <test_env.h>
 #include "PredictOS.h"
 

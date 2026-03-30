@@ -1,5 +1,7 @@
-/*
- * PredictOS.c
+/**
+ * @file PredictOS.c
+ * @author Yi Ren
+ * @brief Source file of Predict OS
  */
 
 #include <test_env.h>
@@ -31,17 +33,17 @@
 // Task Control Block
 struct PdOSTaskControlBlock
 {
-	void *psp;            // stack pointer
-	uint32_t wkUpTime;    // next wake up time
-	uint8_t prio;         // priority
-	uint8_t preserve[3];  // align by 4 bytes
-	uint32_t memStartIndex;
-	uint32_t memSize;
+	void *psp;            	// stack pointer
+	uint32_t wkUpTime;    	// next wake up time
+	uint8_t prio;         	// priority
+	uint8_t preserve[3];  	// align by 4 bytes
+	uint32_t memStartIndex;	// start index in memory pool
+	uint32_t memSize;		// memory size
 };
 
 extern uint32_t SystemCoreClock;
 
-// all these variables should be placed in DTCM
+// all these variables should be placed in core-local memory
 PDOS_DTCM static struct PdOSTaskControlBlock tcbPool[MAX_TASK_NUM + 1U] = {};
 PDOS_DTCM static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
 PDOS_DTCM static volatile PdOSTaskHandle currTask = NULL;
@@ -50,8 +52,10 @@ PDOS_DTCM static uint32_t readySet = 0U;
 PDOS_DTCM static uint32_t blockedSet = 0U;
 PDOS_DTCM static volatile uint32_t systime = 0U;
 
+// memory pool in main memory (monotonic allocated)
 static uint8_t memPool[MEM_POOL_SIZE];
 PDOS_DTCM static uint32_t freeMemIndex = 0U;
+// local memory for task execution
 PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];
 
 // circular buffer for log storage
@@ -59,10 +63,13 @@ static uint32_t logBuffer[MAX_LOG_NUM * 2] = {};
 PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
 
-// log format:
-//	systime(32 bits) - 0(16 bits) - prio(8 bits) - event(8 bits)
+// Add an entry to log.
 void PdOS_add_log(PdOSLogEventType logEvent)
 {
+	/* 
+	  log format:
+		systime(32 bits) - 0(16 bits) - priority(8 bits) - event(8 bits) 
+	*/
 	localLogBuffer[logIndex * 2] = systime;
 	localLogBuffer[logIndex * 2 + 1] = (uint32_t)((currTask->prio << 8) | ((uint8_t)logEvent));
 	logIndex = (logIndex + 1 < MAX_LOG_NUM) ? (logIndex + 1) : 0;
@@ -144,7 +151,8 @@ static void PdOS_sched(void)
 {
 	if (readySet == 0U)
 	{
-		nextTask = tasks[0];  // idle task
+		// set idle task to run
+		nextTask = tasks[0];
 	}
 	else
 	{
@@ -169,7 +177,8 @@ static void PdOS_idle_task_func(void)
 	while (1)
 	{
 		PdOS_on_idle();
-		// yield CPU when executing non-preemptively
+		// yield CPU when having task ready
+		// used in fully non-preemptive mode
 		if (readySet != 0U)
 		{
 			__disable_irq();
@@ -186,7 +195,7 @@ PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
 
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
-	// create the idle task
+	// create idle task
 	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleStkSto, idleStkSize, 0U);
 	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
 }
@@ -210,6 +219,7 @@ static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 	PdOS_sched();  // switch away from the current task
 }
 
+// Busy wait for a relative time (keep CPU).
 void PdOS_busy_wait(uint32_t ticks)
 {
 	uint32_t releaseTime = systime + ticks;
@@ -219,7 +229,7 @@ void PdOS_busy_wait(uint32_t ticks)
 	}
 }
 
-// Delay for a relative time.
+// Delay for a relative time (yield CPU).
 void PdOS_delay(uint32_t ticks)
 {
 	// idle task should not be blocked
@@ -234,12 +244,12 @@ void PdOS_delay(uint32_t ticks)
 	__enable_irq();
 }
 
-// Delay until a specific absolute time.
+// Delay until a specific absolute time (yield CPU).
 void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
 {
 	uint32_t nextWkUpTime;
 
-	// handle illegal cases
+	// handle illegal cases. similar with above
 	if ((currTask == tasks[0]) || (period == 0U) || (prevWkUpTime == NULL))
 	{
 		return;
@@ -295,6 +305,7 @@ static void PdOS_systick_callback(systick_driver_t *sdp)
 	(void)sdp;
 	PdOS_tick();
 
+// call scheduler at every systick only when preemptions are allowed
 #if ALLOW_PREEMPTION == 1U
 	__disable_irq();
 	PdOS_sched();
@@ -308,7 +319,7 @@ static void PdOS_set_systick(void)
 {
 	systick_init(&DRV_SYSTICK);
 	systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
-	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));  // frequency set to 1000Hz
+	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));
 	systick_set_cb(&DRV_SYSTICK, PdOS_systick_callback);
 	systick_start(&DRV_SYSTICK);
 }
@@ -318,8 +329,7 @@ void PdOS_run()
 {
 	PdOS_set_systick();
 
-	// call the scheduler explicitly
-	// to transfer control to the RTOS
+	// call the scheduler explicitly to transfer control to the RTOS
 	__disable_irq();	
 	PdOS_sched();
 	__enable_irq();
@@ -328,9 +338,10 @@ void PdOS_run()
 	while (1);
 }
 
+// Get the start address of available core-local memory for tasks.
 void *PdOS_get_local_mem_addr(void)
 {
-	// task always operates on core-local memory
+	// task always operates on the same core-local memory
 	return (void *)localMem;
 }
 
