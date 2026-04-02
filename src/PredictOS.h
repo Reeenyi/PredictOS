@@ -19,17 +19,6 @@ typedef enum
 	PDOS_ERROR = 1U
 } PdOSErrCode;
 
-// log event
-typedef enum _PdOSLogEventType
-{
-	PDOS_ENTER_READ = 0U,
-	PDOS_EXIT_READ = 1U,
-	PDOS_ENTER_EXECUTE = 2U,
-	PDOS_EXIT_EXECUTE = 3U,
-	PDOS_ENTER_WRITE = 4U,
-	PDOS_EXIT_WRITE = 5U
-}PdOSLogEventType;
-
 // maximum task number. should be no more than 32
 #define MAX_TASK_NUM (32U)
 
@@ -46,7 +35,7 @@ typedef enum _PdOSLogEventType
 #define MAX_LOG_NUM (100U)
 
 // fully preemptive / fully non-preemptive
-#define ALLOW_PREEMPTION (0U)
+#define ALLOW_PREEMPTION (1U)
 
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);
@@ -110,27 +99,18 @@ void PdOS_delay(uint32_t ticks);
 void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period);
 
 /**
- * @brief Get the start address of available core-local memory for tasks.
- * 
- * @return void* start address
- */
-void *PdOS_get_local_mem_addr(void);
-
-/**
  * @brief Copy data from main memory to core-local memory.
+ * 
+ * @param extraDelayTime extra delay time
+ * @return void* start address of available core-local memory for tasks
  */
-void PdOS_read(void);
+void *PdOS_read(uint32_t extraDelayTime);
 
 /**
  * @brief Copy data from core-local memory back to main memory.
- */
-void PdOS_write(void);
-
-/**
- * @brief Add an entry to log.
  * 
- * @param logEvent log event
+ * @param extraDelayTime extra delay time
  */
-void PdOS_add_log(PdOSLogEventType logEvent);
+void PdOS_write(uint32_t extraDelayTime);
 
 #endif /* SRC_PREDICTOS_H_ */

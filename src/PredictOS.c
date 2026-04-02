@@ -24,11 +24,16 @@
             ((((uint32_t)(prio)) << PENDSV_PRIO_OFFSET) &		\
             PENDSV_PRIO_BITMASK))
 
-#define LOG2(x) (32U - __builtin_clz(x))
+#define GET_TASK_INDEX(x) (32U - __builtin_clz(x))
 
 #if MAX_TASK_NUM > 32U
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
+
+#define PDOS_IDLE_PHASE (0U)
+#define PDOS_READ_PHASE (1U)
+#define PDOS_EXECUTE_PHASE (2U)
+#define PDOS_WRITE_PHASE (3U)
 
 // Task Control Block
 struct PdOSTaskControlBlock
@@ -36,7 +41,8 @@ struct PdOSTaskControlBlock
 	void *psp;            	// stack pointer
 	uint32_t wkUpTime;    	// next wake up time
 	uint8_t prio;         	// priority
-	uint8_t preserve[3];  	// align by 4 bytes
+	uint8_t currPhase;		// current phase
+	uint8_t preserve[2];  	// align by 4 bytes
 	uint32_t memStartIndex;	// start index in memory pool
 	uint32_t memSize;		// memory size
 };
@@ -55,24 +61,36 @@ PDOS_DTCM static volatile uint32_t systime = 0U;
 
 // memory pool in main memory (monotonic allocated)
 static uint8_t memPool[MEM_POOL_SIZE];
-PDOS_DTCM static uint32_t freeMemIndex = 0U;
+PDOS_DTCM static uint32_t mainMemFreeIndex = 0U;
 // local memory for task execution
 PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];
+PDOS_DTCM static uint32_t localMemFreeIndex = 0U;
 
 // circular buffer for log storage
 static uint32_t logBuffer[MAX_LOG_NUM * 2] = {};
 PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
 
+// log event
+typedef enum _PdOSLogEventType
+{
+	PDOS_ENTER_READ = 0U,
+	PDOS_EXIT_READ = 1U,
+	PDOS_ENTER_EXECUTE = 2U,
+	PDOS_EXIT_EXECUTE = 3U,
+	PDOS_ENTER_WRITE = 4U,
+	PDOS_EXIT_WRITE = 5U
+} PdOSLogEventType;
+
 // Add an entry to log.
-void PdOS_add_log(PdOSLogEventType logEvent)
+void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
 {
 	/* 
 	  log format:
 		systime(32 bits) - 0(16 bits) - priority(8 bits) - event(8 bits) 
 	*/
 	localLogBuffer[logIndex * 2] = systime;
-	localLogBuffer[logIndex * 2 + 1] = (uint32_t)((currTask->prio << 8) | ((uint8_t)logEvent));
+	localLogBuffer[logIndex * 2 + 1] = (uint32_t)((prio << 8) | ((uint8_t)logEvent));
 	logIndex = (logIndex + 1 < MAX_LOG_NUM) ? (logIndex + 1) : 0;
 }
 
@@ -96,7 +114,7 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 	}
 
 	// ensure enough memory space
-	if ((memSize > MAX_LOCAL_MEM_SIZE) || (freeMemIndex + memSize > MEM_POOL_SIZE))
+	if ((memSize > MAX_LOCAL_MEM_SIZE) || (mainMemFreeIndex + memSize > MEM_POOL_SIZE))
 	{
 		return NULL;
 	}
@@ -128,12 +146,13 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 
 	h->psp = psp;
 	h->prio = prio;
+	h->currPhase = PDOS_IDLE_PHASE;
 	h->wkUpTime = 0U;
 
 	// allocate space in main memory
 	h->memSize = memSize;
-	h->memStartIndex = freeMemIndex;
-	freeMemIndex += memSize;
+	h->memStartIndex = mainMemFreeIndex;
+	mainMemFreeIndex += memSize;
 	
 	tasks[prio] = h;
 
@@ -150,6 +169,22 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 // Needs to be called in a critical section.
 static void PdOS_sched(void)
 {
+	PdOSTaskHandle candidateTask;
+
+	// on init
+	if (currTask == NULL)
+	{
+		nextTask = (readySet == 0U) ? tasks[0] : tasks[GET_TASK_INDEX(readySet)];
+		ICSR_REG |= PENDSVSET_BITMASK;
+		return;
+	}
+
+	// memory phases cannot be preempted
+	if ((currTask->currPhase == PDOS_READ_PHASE) || (currTask->currPhase == PDOS_WRITE_PHASE))
+	{
+		return;
+	}
+
 	if (readySet == 0U)
 	{
 		// set idle task to run
@@ -157,7 +192,35 @@ static void PdOS_sched(void)
 	}
 	else
 	{
-		nextTask = tasks[LOG2(readySet)];
+		candidateTask = tasks[GET_TASK_INDEX(readySet)];
+		if (candidateTask != currTask)
+		{
+			if (candidateTask->prio < currTask->prio)
+			{
+				// CPU yield
+				nextTask = candidateTask;
+				if ((nextTask != tasks[0]) && (nextTask->currPhase == PDOS_EXECUTE_PHASE))
+				{
+					// add log: preempted task resumes execution
+					PdOS_add_log(nextTask->prio, PDOS_ENTER_EXECUTE);
+				}
+			}
+			else
+			{
+				// preemption
+				// preemption allowed only when having enough space in core-local memory
+				if (localMemFreeIndex + candidateTask->memSize < MAX_LOCAL_MEM_SIZE)
+				{
+					nextTask = candidateTask;
+					if (currTask != tasks[0])
+					{
+						// add log: preempted task suspends execution
+						PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
+					}
+				}
+			}
+			
+		}
 	}
 
 	if (nextTask != currTask)
@@ -278,7 +341,7 @@ static void PdOS_tick(void)
 	
 	while (tmpBlockedSet != 0U)
 	{
-		h = tasks[LOG2(tmpBlockedSet)];
+		h = tasks[GET_TASK_INDEX(tmpBlockedSet)];
 		bitmask = (1U << (h->prio - 1U));
 
 		// convert to signed integer to handle systime overflow
@@ -333,25 +396,45 @@ void PdOS_run()
 	while (1);
 }
 
-// Get the start address of available core-local memory for tasks.
-void *PdOS_get_local_mem_addr(void)
-{
-	// task always operates on the same core-local memory
-	return (void *)localMem;
-}
-
 // Copy data from main memory to core-local memory.
-void PdOS_read(void)
+void *PdOS_read(uint32_t extraDelayTime)
 {
-	memcpy((void *)localMem, (void *)&memPool[currTask->memStartIndex], currTask->memSize);
+	uint8_t *currLocalMem;
+	
+	currTask->currPhase = PDOS_READ_PHASE;
+	PdOS_add_log(currTask->prio, PDOS_ENTER_READ);
+
+	currLocalMem = localMem + localMemFreeIndex;
+	localMemFreeIndex += currTask->memSize;
+	memcpy((void *)currLocalMem, (void *)&memPool[currTask->memStartIndex], currTask->memSize);
+	PdOS_busy_wait(extraDelayTime);
+	
+	PdOS_add_log(currTask->prio, PDOS_EXIT_READ);
+
+	currTask->currPhase = PDOS_EXECUTE_PHASE;
+	PdOS_add_log(currTask->prio, PDOS_ENTER_EXECUTE);
+
+	return (void *)currLocalMem;
 }
 
 // Copy data from core-local memory back to main memory.
-void PdOS_write(void)
+void PdOS_write(uint32_t extraDelayTime)
 {
-	memcpy((void *)&memPool[currTask->memStartIndex], (void *)localMem, currTask->memSize);
+	uint8_t *currLocalMem;
+	
+	currTask->currPhase = PDOS_WRITE_PHASE;
+	PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
+	PdOS_add_log(currTask->prio, PDOS_ENTER_WRITE);
+
+	localMemFreeIndex -= currTask->memSize;
+	currLocalMem = localMem + localMemFreeIndex;
+	memcpy((void *)&memPool[currTask->memStartIndex], (void *)currLocalMem, currTask->memSize);
 	// also copy log to main memory in WRITE phase
 	memcpy((void *)logBuffer, (void *)localLogBuffer, sizeof(localLogBuffer));
+	PdOS_busy_wait(extraDelayTime);
+
+	currTask->currPhase = PDOS_IDLE_PHASE;
+	PdOS_add_log(currTask->prio, PDOS_EXIT_WRITE);
 }
 
 // Assembly function for context switch.

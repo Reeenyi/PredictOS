@@ -7,39 +7,47 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-PDOS_DTCM uint32_t blinky1Stack[32];
-PDOS_DTCM uint32_t blinky2Stack[32];
+PDOS_DTCM uint32_t task1Stack[32];
+PDOS_DTCM uint32_t task2Stack[32];
 
-PdOSTaskHandle blinky1Handle;
-PdOSTaskHandle blinky2Handle;
+PdOSTaskHandle task1Handle;
+PdOSTaskHandle task2Handle;
 
 PDOS_ITCM void task1_func(void)
 {
 	uint32_t i;
 	uint32_t prevWkUpTime = PdOS_get_systime();
-	uint8_t *localMem = (uint8_t *)PdOS_get_local_mem_addr();
+	uint8_t *localMem;
+	uint8_t magicNum;
+	uint8_t prevMagicNum = 66;
+
+	localMem = PdOS_read(0);
+	for (i = 0; i < 100U; i++)
+	{
+		localMem[i] = prevMagicNum;
+	}
+	PdOS_write(0);
 
 	while (1)
 	{
-		PdOS_add_log(PDOS_ENTER_READ);
-		PdOS_read();
-		PdOS_busy_wait(2);
-		PdOS_add_log(PDOS_EXIT_READ);
-
-		PdOS_add_log(PDOS_ENTER_EXECUTE);
+		localMem = PdOS_read(2);
+		
+		magicNum = prevMagicNum + 1;
 		for (i = 0; i < 100U; i++)
 		{
-			localMem[i]++;
+			if (localMem[i] != prevMagicNum)
+			{
+				// data unexpected
+				while (1);
+			}
+			localMem[i] = magicNum;
 		}
+		prevMagicNum = magicNum;
 		PdOS_busy_wait(5);
-		PdOS_add_log(PDOS_EXIT_EXECUTE);
+		
+		PdOS_write(2);
 
-		PdOS_add_log(PDOS_ENTER_WRITE);
-		PdOS_write();
-		PdOS_busy_wait(3);
-		PdOS_add_log(PDOS_EXIT_WRITE);
-
-		PdOS_delayUntil(&prevWkUpTime, 50);
+		PdOS_delayUntil(&prevWkUpTime, 30);
 	}
 }
 
@@ -47,29 +55,37 @@ PDOS_ITCM void task2_func(void)
 {
 	uint32_t i;
 	uint32_t prevWkUpTime = PdOS_get_systime();
-	uint8_t *localMem = (uint8_t *)PdOS_get_local_mem_addr();
+	uint8_t *localMem;
+	uint8_t magicNum;
+	uint8_t prevMagicNum = 12;
+
+	localMem = PdOS_read(0);
+	for (i = 0; i < 200U; i++)
+	{
+		localMem[i] = prevMagicNum;
+	}
+	PdOS_write(0);
 
 	while (1)
 	{
-		PdOS_add_log(PDOS_ENTER_READ);
-		PdOS_read();
-		PdOS_busy_wait(5);
-		PdOS_add_log(PDOS_EXIT_READ);
+		localMem = PdOS_read(5);
 
-		PdOS_add_log(PDOS_ENTER_EXECUTE);
-		PdOS_busy_wait(10);
+		magicNum = prevMagicNum + 2;
 		for (i = 0; i < 200U; i++)
 		{
-			localMem[i]++;
+			if (localMem[i] != prevMagicNum)
+			{
+				// data unexpected
+				while (1);
+			}
+			localMem[i] = magicNum;
 		}
-		PdOS_add_log(PDOS_EXIT_EXECUTE);
+		prevMagicNum = magicNum;
+		PdOS_busy_wait(45);
 
-		PdOS_add_log(PDOS_ENTER_WRITE);
-		PdOS_write();
-		PdOS_busy_wait(5);
-		PdOS_add_log(PDOS_EXIT_WRITE);
+		PdOS_write(10);
 
-		PdOS_delayUntil(&prevWkUpTime, 100);
+		PdOS_delayUntil(&prevWkUpTime, 160);
 	}
 }
 
@@ -88,8 +104,8 @@ int main(void)
 
 	PdOS_init();
 
-	blinky1Handle = PdOS_create_task(&task1_func, 5U, blinky1Stack, sizeof(blinky1Stack), 100U);
-	blinky2Handle = PdOS_create_task(&task2_func, 2U, blinky2Stack, sizeof(blinky2Stack), 200U);
+	task1Handle = PdOS_create_task(&task1_func, 5U, task1Stack, sizeof(task1Stack), 100U);
+	task2Handle = PdOS_create_task(&task2_func, 2U, task2Stack, sizeof(task2Stack), 200U);
 
 	PdOS_run();
 }
