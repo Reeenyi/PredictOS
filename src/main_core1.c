@@ -7,7 +7,6 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-PDOS_DTCM uint32_t idleTaskStack[32];
 PDOS_DTCM uint32_t blinky1Stack[32];
 PDOS_DTCM uint32_t blinky2Stack[32];
 
@@ -87,7 +86,7 @@ int main(void)
 	USER_LED_SWITCH_OFF(USER_LED_B);
 
 
-	PdOS_init(idleTaskStack, sizeof(idleTaskStack));
+	PdOS_init();
 
 	blinky1Handle = PdOS_create_task(&task1_func, 5U, blinky1Stack, sizeof(blinky1Stack), 100U);
 	blinky2Handle = PdOS_create_task(&task2_func, 2U, blinky2Stack, sizeof(blinky2Stack), 200U);

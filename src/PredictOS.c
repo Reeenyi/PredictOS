@@ -50,6 +50,7 @@ PDOS_DTCM static volatile PdOSTaskHandle currTask = NULL;
 PDOS_DTCM static volatile PdOSTaskHandle nextTask = NULL;
 PDOS_DTCM static uint32_t readySet = 0U;
 PDOS_DTCM static uint32_t blockedSet = 0U;
+PDOS_DTCM static uint32_t idleTaskStack[32];
 PDOS_DTCM static volatile uint32_t systime = 0U;
 
 // memory pool in main memory (monotonic allocated)
@@ -166,17 +167,11 @@ static void PdOS_sched(void)
 	}
 }
 
-// Default weak function on idle.
-__attribute__((weak)) void PdOS_on_idle(void)
-{
-}
-
 // Idle task function.
 static void PdOS_idle_task_func(void)
 {
 	while (1)
 	{
-		PdOS_on_idle();
 		// yield CPU when having task ready
 		// used in fully non-preemptive mode
 		if (readySet != 0U)
@@ -189,14 +184,14 @@ static void PdOS_idle_task_func(void)
 }
 
 // Initialize OS.
-PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize)
+PdOSErrCode PdOS_init(void)
 {
 	PdOSTaskHandle idleTaskHandle;
 
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
 	// create idle task
-	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleStkSto, idleStkSize, 0U);
+	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
 	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
 }
 

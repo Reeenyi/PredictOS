@@ -55,21 +55,12 @@ typedef void (*PdOSTaskFunction)(void);
 typedef struct PdOSTaskControlBlock *PdOSTaskHandle;
 
 /**
- * @brief Default weak function on idle (to be overwritten).
- */
-void PdOS_on_idle(void);
-
-/**
  * @brief Initialize OS.
  * 
- * @param idleStkSto pointer to idle stack
- * @param idleStkSize idle stack size
  * @retval PDOS_OK success
  * @retval PDOS_ERROR fail
- * 
- * @note stack size needs to be at least 64 bytes (16 words)
  */
-PdOSErrCode PdOS_init(void *idleStkSto, uint32_t idleStkSize);
+PdOSErrCode PdOS_init(void);
 
 /**
  * @brief Create a new task and return its handle.
