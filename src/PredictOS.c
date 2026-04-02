@@ -30,10 +30,25 @@
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
 
-#define PDOS_IDLE_PHASE (0U)
-#define PDOS_READ_PHASE (1U)
-#define PDOS_EXECUTE_PHASE (2U)
-#define PDOS_WRITE_PHASE (3U)
+// log event
+typedef enum _PdOSLogEventType
+{
+	PDOS_ENTER_READ 	= 0U,
+	PDOS_EXIT_READ 		= 1U,
+	PDOS_ENTER_EXECUTE 	= 2U,
+	PDOS_EXIT_EXECUTE 	= 3U,
+	PDOS_ENTER_WRITE 	= 4U,
+	PDOS_EXIT_WRITE 	= 5U
+} PdOSLogEventType;
+
+// task phases
+typedef enum _PdOSTaskPhaseType
+{
+	PDOS_IDLE_PHASE  	= 0U,
+	PDOS_READ_PHASE 	= 1U,
+	PDOS_EXECUTE_PHASE 	= 2U,
+	PDOS_WRITE_PHASE 	= 3U
+} PdOSTaskPhaseType;
 
 // Task Control Block
 struct PdOSTaskControlBlock
@@ -70,17 +85,6 @@ PDOS_DTCM static uint32_t localMemFreeIndex = 0U;
 static uint32_t logBuffer[MAX_LOG_NUM * 2] = {};
 PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
-
-// log event
-typedef enum _PdOSLogEventType
-{
-	PDOS_ENTER_READ = 0U,
-	PDOS_EXIT_READ = 1U,
-	PDOS_ENTER_EXECUTE = 2U,
-	PDOS_EXIT_EXECUTE = 3U,
-	PDOS_ENTER_WRITE = 4U,
-	PDOS_EXIT_WRITE = 5U
-} PdOSLogEventType;
 
 // Add an entry to log.
 void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
@@ -146,7 +150,7 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 
 	h->psp = psp;
 	h->prio = prio;
-	h->currPhase = PDOS_IDLE_PHASE;
+	h->currPhase = (uint8_t)PDOS_IDLE_PHASE;
 	h->wkUpTime = 0U;
 
 	// allocate space in main memory
@@ -180,7 +184,7 @@ static void PdOS_sched(void)
 	}
 
 	// memory phases cannot be preempted
-	if ((currTask->currPhase == PDOS_READ_PHASE) || (currTask->currPhase == PDOS_WRITE_PHASE))
+	if ((currTask->currPhase == (uint8_t)PDOS_READ_PHASE) || (currTask->currPhase == (uint8_t)PDOS_WRITE_PHASE))
 	{
 		return;
 	}
@@ -193,33 +197,35 @@ static void PdOS_sched(void)
 	else
 	{
 		candidateTask = tasks[GET_TASK_INDEX(readySet)];
-		if (candidateTask != currTask)
+		if (candidateTask == currTask)
 		{
-			if (candidateTask->prio < currTask->prio)
-			{
-				// CPU yield
-				nextTask = candidateTask;
-				if ((nextTask != tasks[0]) && (nextTask->currPhase == PDOS_EXECUTE_PHASE))
-				{
-					// add log: preempted task resumes execution
-					PdOS_add_log(nextTask->prio, PDOS_ENTER_EXECUTE);
-				}
-			}
-			else
-			{
-				// preemption
-				// preemption allowed only when having enough space in core-local memory
-				if (localMemFreeIndex + candidateTask->memSize < MAX_LOCAL_MEM_SIZE)
-				{
-					nextTask = candidateTask;
-					if (currTask != tasks[0])
-					{
-						// add log: preempted task suspends execution
-						PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
-					}
-				}
-			}
+			return;
+		}
+		
+		// CPU yield
+		if (candidateTask->prio < currTask->prio)
+		{
 			
+			nextTask = candidateTask;
+			if ((nextTask != tasks[0]) && (nextTask->currPhase == (uint8_t)PDOS_EXECUTE_PHASE))
+			{
+				// add log: preempted task resumes execution
+				PdOS_add_log(nextTask->prio, PDOS_ENTER_EXECUTE);
+			}
+		}
+		// preemption
+		else
+		{
+			// preemption allowed only when having enough space in core-local memory
+			if (localMemFreeIndex + candidateTask->memSize < MAX_LOCAL_MEM_SIZE)
+			{
+				nextTask = candidateTask;
+				if (currTask != tasks[0])
+				{
+					// add log: preempted task suspends execution
+					PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
+				}
+			}
 		}
 	}
 
@@ -401,7 +407,7 @@ void *PdOS_read(uint32_t extraDelayTime)
 {
 	uint8_t *currLocalMem;
 	
-	currTask->currPhase = PDOS_READ_PHASE;
+	currTask->currPhase = (uint8_t)PDOS_READ_PHASE;
 	PdOS_add_log(currTask->prio, PDOS_ENTER_READ);
 
 	currLocalMem = localMem + localMemFreeIndex;
@@ -411,7 +417,7 @@ void *PdOS_read(uint32_t extraDelayTime)
 	
 	PdOS_add_log(currTask->prio, PDOS_EXIT_READ);
 
-	currTask->currPhase = PDOS_EXECUTE_PHASE;
+	currTask->currPhase = (uint8_t)PDOS_EXECUTE_PHASE;
 	PdOS_add_log(currTask->prio, PDOS_ENTER_EXECUTE);
 
 	return (void *)currLocalMem;
@@ -422,7 +428,7 @@ void PdOS_write(uint32_t extraDelayTime)
 {
 	uint8_t *currLocalMem;
 	
-	currTask->currPhase = PDOS_WRITE_PHASE;
+	currTask->currPhase = (uint8_t)PDOS_WRITE_PHASE;
 	PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
 	PdOS_add_log(currTask->prio, PDOS_ENTER_WRITE);
 
@@ -433,7 +439,7 @@ void PdOS_write(uint32_t extraDelayTime)
 	memcpy((void *)logBuffer, (void *)localLogBuffer, sizeof(localLogBuffer));
 	PdOS_busy_wait(extraDelayTime);
 
-	currTask->currPhase = PDOS_IDLE_PHASE;
+	currTask->currPhase = (uint8_t)PDOS_IDLE_PHASE;
 	PdOS_add_log(currTask->prio, PDOS_EXIT_WRITE);
 }
 
