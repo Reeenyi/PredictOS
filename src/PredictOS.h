@@ -29,13 +29,19 @@ typedef enum
 #define MEM_POOL_SIZE (4096U)
 
 // maximum size of core-local memory buffer
-#define MAX_LOCAL_MEM_SIZE (1024U)
+#define MAX_LOCAL_MEM_SIZE (250U)
 
 // maximum number of logs
 #define MAX_LOG_NUM (100U)
 
 // fully preemptive / fully non-preemptive
 #define ALLOW_PREEMPTION (1U)
+
+// 1 for using dummy cycles / 0 for waiting systick in busy wait
+#define USE_BUSY_WAIT_DUMMY (1U)
+
+// dummy cycles per second
+#define DUMMY_CYC_PER_SEC (37594U)
 
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);

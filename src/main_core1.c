@@ -7,8 +7,8 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-#define TASK1_MEM (200U)
-#define TASK2_MEM (100U)
+#define TASK1_MEM (100U)
+#define TASK2_MEM (200U)
 #define TASK3_MEM (100U)
 
 PDOS_DTCM uint32_t task1Stack[128];
@@ -74,7 +74,7 @@ PDOS_ITCM void task2_func(void)
 
 	while (1)
 	{
-		localMem = PdOS_read(5);
+		localMem = PdOS_read(6);
 
 		magicNum = prevMagicNum + 2;
 		for (i = 0; i < TASK2_MEM; i++)
@@ -87,11 +87,11 @@ PDOS_ITCM void task2_func(void)
 			localMem[i] = magicNum;
 		}
 		prevMagicNum = magicNum;
-		PdOS_busy_wait(30);
+		PdOS_busy_wait(10);
 
-		PdOS_write(3);
+		PdOS_write(5);
 
-		PdOS_delayUntil(&prevWkUpTime, 130);
+		PdOS_delayUntil(&prevWkUpTime, 120);
 	}
 }
 
@@ -112,7 +112,7 @@ PDOS_ITCM void task3_func(void)
 
 	while (1)
 	{
-		localMem = PdOS_read(3);
+		localMem = PdOS_read(8);
 
 		magicNum = prevMagicNum + 2;
 		for (i = 0; i < TASK3_MEM; i++)
@@ -125,11 +125,11 @@ PDOS_ITCM void task3_func(void)
 			localMem[i] = magicNum;
 		}
 		prevMagicNum = magicNum;
-		PdOS_busy_wait(30);
+		PdOS_busy_wait(20);
 
-		PdOS_write(3);
+		PdOS_write(10);
 
-		PdOS_delayUntil(&prevWkUpTime, 300);
+		PdOS_delayUntil(&prevWkUpTime, 200);
 	}
 }
 
