@@ -24,7 +24,7 @@
             ((((uint32_t)(prio)) << PENDSV_PRIO_OFFSET) &		\
             PENDSV_PRIO_BITMASK))
 
-#define GET_TASK_INDEX(x) (32U - __builtin_clz(x))
+#define GET_MAX_PRIO(x) (32U - __builtin_clz(x))
 
 #if MAX_TASK_NUM > 32U
 #error "MAX_TASK_NUM cannot exceed 32"
@@ -169,6 +169,37 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 	return h;
 }
 
+// Find the highest-priority available task.
+static PdOSTaskHandle PdOS_find_candidate_task(void)
+{
+	uint32_t tmpReadySet = readySet;
+	uint32_t maxPrio;
+	PdOSTaskHandle t;
+
+	while (tmpReadySet != 0U)
+	{
+		maxPrio = GET_MAX_PRIO(tmpReadySet);
+		t = tasks[maxPrio];
+
+		// if the current task is already running, keep it running,
+		// and don't need to check free memory space
+		if (t == currTask)
+		{
+			return t;
+		}
+
+		// a task is allowed to run only when there is enough space in core-local memory
+		if (localMemFreeIndex + t->memSize <= MAX_LOCAL_MEM_SIZE)
+		{
+			return t;
+		}
+
+		tmpReadySet &= ~(1U << (maxPrio - 1U));
+	}
+
+	return NULL;
+}
+
 // Schedule the next task to run.
 // Needs to be called in a critical section.
 static void PdOS_sched(void)
@@ -178,7 +209,8 @@ static void PdOS_sched(void)
 	// on init
 	if (currTask == NULL)
 	{
-		nextTask = (readySet == 0U) ? tasks[0] : tasks[GET_TASK_INDEX(readySet)];
+		candidateTask = PdOS_find_candidate_task();
+		nextTask = (candidateTask == NULL) ? tasks[0] : candidateTask;
 		ICSR_REG |= PENDSVSET_BITMASK;
 		return;
 	}
@@ -189,24 +221,25 @@ static void PdOS_sched(void)
 		return;
 	}
 
-	if (readySet == 0U)
+	candidateTask = PdOS_find_candidate_task();
+	if (candidateTask == currTask)
+	{
+		return;
+	}
+
+	if (candidateTask == NULL)
 	{
 		// set idle task to run
 		nextTask = tasks[0];
 	}
 	else
 	{
-		candidateTask = tasks[GET_TASK_INDEX(readySet)];
-		if (candidateTask == currTask)
-		{
-			return;
-		}
+		nextTask = candidateTask;
 		
+		// record log
 		// CPU yield
 		if (candidateTask->prio < currTask->prio)
 		{
-			
-			nextTask = candidateTask;
 			if ((nextTask != tasks[0]) && (nextTask->currPhase == (uint8_t)PDOS_EXECUTE_PHASE))
 			{
 				// add log: preempted task resumes execution
@@ -216,15 +249,10 @@ static void PdOS_sched(void)
 		// preemption
 		else
 		{
-			// preemption allowed only when having enough space in core-local memory
-			if (localMemFreeIndex + candidateTask->memSize < MAX_LOCAL_MEM_SIZE)
+			if (currTask != tasks[0])
 			{
-				nextTask = candidateTask;
-				if (currTask != tasks[0])
-				{
-					// add log: preempted task suspends execution
-					PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
-				}
+				// add log: preempted task suspends execution
+				PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
 			}
 		}
 	}
@@ -359,7 +387,7 @@ static void PdOS_tick(void)
 	
 	while (tmpBlockedSet != 0U)
 	{
-		h = tasks[GET_TASK_INDEX(tmpBlockedSet)];
+		h = tasks[GET_MAX_PRIO(tmpBlockedSet)];
 		bitmask = (1U << (h->prio - 1U));
 
 		// convert to signed integer to handle systime overflow
