@@ -49,8 +49,8 @@ SECTIONS
         /* exclude SYSTICK and PredictOS from the default .text section */
         *(EXCLUDE_FILE(*systick*.o *PredictOS*.o) .text)
         *(EXCLUDE_FILE(*systick*.o *PredictOS*.o) .text.*)
-        *(.rodata)
-        *(.rodata.*)
+        *(EXCLUDE_FILE(*systick*.o *PredictOS*.o) .rodata)
+        *(EXCLUDE_FILE(*systick*.o *PredictOS*.o) .rodata.*)
         *(.glue_7t)
         *(.glue_7)
         *(.gcc*)
@@ -94,6 +94,8 @@ SECTIONS
         /* place SYSTICK and PredictOS in ITCM */
         *systick*.o(.text*)
         *PredictOS*.o(.text*)
+        *systick*.o(.rodata*)
+        *PredictOS*.o(.rodata*)
     } > EMBED_ITCM AT> EMBED_NVM
     __itcm_start__ = ORIGIN(EMBED_ITCM);
     __itcm_len__   = LENGTH(EMBED_ITCM);

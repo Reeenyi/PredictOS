@@ -25,21 +25,21 @@ PDOS_ITCM void task1_func(void)
 	uint32_t prevWkUpTime = PdOS_get_systime();
 	uint8_t *localMem;
 	uint8_t magicNum;
-	uint8_t prevMagicNum = 66;
+	uint8_t prevMagicNum = 66U;
 
-	localMem = PdOS_read(0);
-	for (i = 0; i < TASK1_MEM; i++)
+	localMem = PdOS_read(0U);
+	for (i = 0U; i < TASK1_MEM; i++)
 	{
 		localMem[i] = prevMagicNum;
 	}
-	PdOS_write(0);
+	PdOS_write(0U);
 
 	while (1)
 	{
-		localMem = PdOS_read(2);
+		localMem = PdOS_read(2U);
 		
-		magicNum = prevMagicNum + 1;
-		for (i = 0; i < TASK1_MEM; i++)
+		magicNum = prevMagicNum + 1U;
+		for (i = 0U; i < TASK1_MEM; i++)
 		{
 			if (localMem[i] != prevMagicNum)
 			{
@@ -49,11 +49,11 @@ PDOS_ITCM void task1_func(void)
 			localMem[i] = magicNum;
 		}
 		prevMagicNum = magicNum;
-		PdOS_busy_wait(5);
+		PdOS_busy_wait(5U);
 		
-		PdOS_write(2);
+		PdOS_write(2U);
 
-		PdOS_delayUntil(&prevWkUpTime, 30);
+		PdOS_delayUntil(&prevWkUpTime, 30U);
 	}
 }
 
@@ -63,21 +63,21 @@ PDOS_ITCM void task2_func(void)
 	uint32_t prevWkUpTime = PdOS_get_systime();
 	uint8_t *localMem;
 	uint8_t magicNum;
-	uint8_t prevMagicNum = 12;
+	uint8_t prevMagicNum = 12U;
 
-	localMem = PdOS_read(0);
-	for (i = 0; i < TASK2_MEM; i++)
+	localMem = PdOS_read(0U);
+	for (i = 0U; i < TASK2_MEM; i++)
 	{
 		localMem[i] = prevMagicNum;
 	}
-	PdOS_write(0);
+	PdOS_write(0U);
 
 	while (1)
 	{
-		localMem = PdOS_read(6);
+		localMem = PdOS_read(6U);
 
-		magicNum = prevMagicNum + 2;
-		for (i = 0; i < TASK2_MEM; i++)
+		magicNum = prevMagicNum + 2U;
+		for (i = 0U; i < TASK2_MEM; i++)
 		{
 			if (localMem[i] != prevMagicNum)
 			{
@@ -87,11 +87,11 @@ PDOS_ITCM void task2_func(void)
 			localMem[i] = magicNum;
 		}
 		prevMagicNum = magicNum;
-		PdOS_busy_wait(10);
+		PdOS_busy_wait(10U);
 
-		PdOS_write(5);
+		PdOS_write(5U);
 
-		PdOS_delayUntil(&prevWkUpTime, 120);
+		PdOS_delayUntil(&prevWkUpTime, 120U);
 	}
 }
 
@@ -101,21 +101,21 @@ PDOS_ITCM void task3_func(void)
 	uint32_t prevWkUpTime = PdOS_get_systime();
 	uint8_t *localMem;
 	uint8_t magicNum;
-	uint8_t prevMagicNum = 25;
+	uint8_t prevMagicNum = 25U;
 
-	localMem = PdOS_read(0);
-	for (i = 0; i < TASK3_MEM; i++)
+	localMem = PdOS_read(0U);
+	for (i = 0U; i < TASK3_MEM; i++)
 	{
 		localMem[i] = prevMagicNum;
 	}
-	PdOS_write(0);
+	PdOS_write(0U);
 
 	while (1)
 	{
-		localMem = PdOS_read(8);
+		localMem = PdOS_read(8U);
 
-		magicNum = prevMagicNum + 2;
-		for (i = 0; i < TASK3_MEM; i++)
+		magicNum = prevMagicNum + 2U;
+		for (i = 0U; i < TASK3_MEM; i++)
 		{
 			if (localMem[i] != prevMagicNum)
 			{
@@ -125,11 +125,11 @@ PDOS_ITCM void task3_func(void)
 			localMem[i] = magicNum;
 		}
 		prevMagicNum = magicNum;
-		PdOS_busy_wait(20);
+		PdOS_busy_wait(20U);
 
-		PdOS_write(10);
+		PdOS_write(10U);
 
-		PdOS_delayUntil(&prevWkUpTime, 200);
+		PdOS_delayUntil(&prevWkUpTime, 200U);
 	}
 }
 
