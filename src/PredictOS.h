@@ -16,7 +16,8 @@
 typedef enum
 {
 	PDOS_OK = 0U,
-	PDOS_ERROR = 1U
+	PDOS_ERROR = 1U,
+	PDOS_INVALID_PARAM = 2U
 } PdOSErrCode;
 
 // maximum task number. should be no more than 32
@@ -46,9 +47,6 @@ typedef enum
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);
 
-// task handle
-typedef struct PdOSTaskControlBlock *PdOSTaskHandle;
-
 /**
  * @brief Initialize OS.
  * 
@@ -66,11 +64,13 @@ PdOSErrCode PdOS_init(void);
  * @param stkSto pointer to task stack
  * @param stkSize stack size
  * @param memSize maximum core-local memory usage
- * @return PdOSTaskHandle task handle. return NULL on failure
+ * @retval PDOS_OK success
+ * @retval PDOS_ERROR fail
+ * @retval PDOS_INVALID_PARAM invalid parameters
  * 
  * @note stack size needs to be at least 64 bytes (16 words)
  */
-PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize);
+PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize);
 
 /**
  * @brief Set OS to run.

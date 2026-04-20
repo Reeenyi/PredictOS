@@ -63,6 +63,9 @@ struct PdOSTaskControlBlock
 	uint32_t memSize;		// memory size
 };
 
+// task handle
+typedef struct PdOSTaskControlBlock *PdOSTaskHandle;
+
 extern uint32_t SystemCoreClock;
 
 // all these variables should be placed in core-local memory
@@ -100,8 +103,7 @@ void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
 }
 
 // Create a new task and return its handle.
-// Return NULL on failure.
-PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize)
+PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize)
 {
 	PdOSTaskHandle h;
 	uint32_t *psp;
@@ -109,25 +111,25 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uin
 	// stack size needs to be at least 64 bytes to store one frame
 	if ((stkSto == NULL) || (stkSize < 64U))
 	{
-		return NULL;
+		return PDOS_INVALID_PARAM;
 	}
 
 	// requires an unique priority no greater than MAX_TASK_NUM
 	if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
 	{
-		return NULL;
+		return PDOS_INVALID_PARAM;
 	}
 
 	// preemption threshold needs to be no less than priority
 	if (threshold < prio)
 	{
-		return NULL;
+		return PDOS_INVALID_PARAM;
 	}
 
 	// ensure enough memory space
 	if ((memSize > MAX_LOCAL_MEM_SIZE) || (mainMemFreeIndex + memSize > MEM_POOL_SIZE))
 	{
-		return NULL;
+		return PDOS_ERROR;
 	}
 
 	// stack top, aligned by 8 bytes
@@ -174,7 +176,7 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uin
 		readySet |= (1U << (prio - 1U));
 	}
 
-	return h;
+	return PDOS_OK;
 }
 
 // Find the highest-priority available task.
@@ -290,13 +292,11 @@ static void PdOS_idle_task_func(void)
 // Initialize OS.
 PdOSErrCode PdOS_init(void)
 {
-	PdOSTaskHandle idleTaskHandle;
-
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
+
 	// create idle task
-	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
-	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
+	return PdOS_create_task(&PdOS_idle_task_func, 0U, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
 }
 
 // Get current system time.
