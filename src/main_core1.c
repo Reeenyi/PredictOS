@@ -7,127 +7,59 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-#define TASK1_MEM (100U)
-#define TASK2_MEM (200U)
-#define TASK3_MEM (100U)
+#define TASK_LIST																						\
+	/*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/	\
+	X(1 , 66U  , 128U    , 100U     , 5U      , 5U       , 2U       , 5U       , 2U        , 30U    )	\
+	X(2 , 77U  , 128U    , 200U     , 3U      , 3U       , 6U       , 10U      , 5U        , 120U   )	\
+	X(3 , 88U  , 128U    , 100U     , 2U      , 2U       , 8U       , 20U      , 10U       , 200U   )
 
-PDOS_DTCM uint32_t task1Stack[128];
-PDOS_DTCM uint32_t task2Stack[128];
-PDOS_DTCM uint32_t task3Stack[128];
-
-PDOS_ITCM void task1_func(void)
-{
-	uint32_t i;
-	uint32_t prevWkUpTime = PdOS_get_systime();
-	uint8_t *localMem;
-	uint8_t magicNum;
-	uint8_t prevMagicNum = 66U;
-
-	localMem = PdOS_read(0U);
-	for (i = 0U; i < TASK1_MEM; i++)
-	{
-		localMem[i] = prevMagicNum;
-	}
-	PdOS_write(0U);
-
-	while (1)
-	{
-		localMem = PdOS_read(2U);
-		
-		magicNum = prevMagicNum + 1U;
-		for (i = 0U; i < TASK1_MEM; i++)
-		{
-			if (localMem[i] != prevMagicNum)
-			{
-				// data unexpected
-				while (1);
-			}
-			localMem[i] = magicNum;
-		}
-		prevMagicNum = magicNum;
-		PdOS_busy_wait(5U);
-		
-		PdOS_write(2U);
-
-		PdOS_delayUntil(&prevWkUpTime, 30U);
-	}
+#define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+																\
+PDOS_DTCM uint32_t task##ID##Stack[STACK_SIZE];					\
+																\
+PDOS_ITCM void task##ID##_func(void)							\
+{																\
+	uint32_t i;													\
+	uint32_t prevWkUpTime = PdOS_get_systime();					\
+	uint8_t *localMem;											\
+	uint8_t magicNum;											\
+	uint8_t prevMagicNum = MAGIC_NUMBER;						\
+																\
+	localMem = PdOS_read(0U);									\
+	for (i = 0U; i < MEMORY_USAGE; i++)							\
+	{															\
+		localMem[i] = prevMagicNum;								\
+	}															\
+	PdOS_write(0U);												\
+																\
+	while (1)													\
+	{															\
+		localMem = PdOS_read(READ_TIME);						\
+																\
+		magicNum = prevMagicNum + 1U;							\
+		for (i = 0U; i < MEMORY_USAGE; i++)						\
+		{														\
+			if (localMem[i] != prevMagicNum)					\
+			{													\
+				/* data unexpected */							\
+				while (1);										\
+			}													\
+			localMem[i] = magicNum;								\
+		}														\
+		prevMagicNum = magicNum;								\
+		PdOS_busy_wait(EXECUTE_TIME);							\
+																\
+		PdOS_write(WRITE_TIME);									\
+																\
+		PdOS_delayUntil(&prevWkUpTime, PERIOD);					\
+	}															\
 }
 
-PDOS_ITCM void task2_func(void)
-{
-	uint32_t i;
-	uint32_t prevWkUpTime = PdOS_get_systime();
-	uint8_t *localMem;
-	uint8_t magicNum;
-	uint8_t prevMagicNum = 12U;
+#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD)	\
+	DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD)
 
-	localMem = PdOS_read(0U);
-	for (i = 0U; i < TASK2_MEM; i++)
-	{
-		localMem[i] = prevMagicNum;
-	}
-	PdOS_write(0U);
-
-	while (1)
-	{
-		localMem = PdOS_read(6U);
-
-		magicNum = prevMagicNum + 2U;
-		for (i = 0U; i < TASK2_MEM; i++)
-		{
-			if (localMem[i] != prevMagicNum)
-			{
-				// data unexpected
-				while (1);
-			}
-			localMem[i] = magicNum;
-		}
-		prevMagicNum = magicNum;
-		PdOS_busy_wait(10U);
-
-		PdOS_write(5U);
-
-		PdOS_delayUntil(&prevWkUpTime, 120U);
-	}
-}
-
-PDOS_ITCM void task3_func(void)
-{
-	uint32_t i;
-	uint32_t prevWkUpTime = PdOS_get_systime();
-	uint8_t *localMem;
-	uint8_t magicNum;
-	uint8_t prevMagicNum = 25U;
-
-	localMem = PdOS_read(0U);
-	for (i = 0U; i < TASK3_MEM; i++)
-	{
-		localMem[i] = prevMagicNum;
-	}
-	PdOS_write(0U);
-
-	while (1)
-	{
-		localMem = PdOS_read(8U);
-
-		magicNum = prevMagicNum + 2U;
-		for (i = 0U; i < TASK3_MEM; i++)
-		{
-			if (localMem[i] != prevMagicNum)
-			{
-				// data unexpected
-				while (1);
-			}
-			localMem[i] = magicNum;
-		}
-		prevMagicNum = magicNum;
-		PdOS_busy_wait(20U);
-
-		PdOS_write(10U);
-
-		PdOS_delayUntil(&prevWkUpTime, 200U);
-	}
-}
+TASK_LIST
+#undef X
 
 int main(void)
 {
@@ -137,28 +69,21 @@ int main(void)
                    TEST_INIT_BOARD    |
                    TEST_INIT_IRQ));
 
-    /* Switch-off user leds.*/
+	/* Switch-off user leds.*/
 	USER_LED_SWITCH_OFF(USER_LED_A);
 	USER_LED_SWITCH_OFF(USER_LED_B);
 
 
 	PdOS_init();
 
-	// create task 1
-	if (PdOS_create_task(&task1_func, 5U, 5U, task1Stack, sizeof(task1Stack), TASK1_MEM) != PDOS_OK)
-	{
-		while (1);
+#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEM_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+	if (PdOS_create_task(&task##ID##_func, PRIORITY, THRESHOLD, task##ID##Stack, sizeof(task##ID##Stack), MEM_USAGE) != PDOS_OK) \
+	{				\
+		while (1);	\
 	}
-	// create task 2
-	if (PdOS_create_task(&task2_func, 3U, 3U, task2Stack, sizeof(task2Stack), TASK2_MEM) != PDOS_OK)
-	{
-		while (1);
-	}
-	// create task 3
-	if (PdOS_create_task(&task3_func, 2U, 10U, task3Stack, sizeof(task3Stack), TASK3_MEM) != PDOS_OK)
-	{
-		while (1);
-	}
+
+TASK_LIST
+#undef X
 
 	PdOS_run();
 }
