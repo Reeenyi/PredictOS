@@ -56,8 +56,9 @@ struct PdOSTaskControlBlock
 	void *psp;            	// stack pointer
 	uint32_t wkUpTime;    	// next wake up time
 	uint8_t prio;         	// priority
+	uint8_t threshold;		// preemption threshold
 	uint8_t phase;			// current phase
-	uint8_t preserve[2];  	// align by 4 bytes
+	uint8_t preserve;  		// align by 4 bytes
 	uint32_t memStartIndex;	// start index in memory pool
 	uint32_t memSize;		// memory size
 };
@@ -100,7 +101,7 @@ void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
 
 // Create a new task and return its handle.
 // Return NULL on failure.
-PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize, uint32_t memSize)
+PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize)
 {
 	PdOSTaskHandle h;
 	uint32_t *psp;
@@ -113,6 +114,12 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 
 	// requires an unique priority no greater than MAX_TASK_NUM
 	if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
+	{
+		return NULL;
+	}
+
+	// preemption threshold needs to be no less than priority
+	if (threshold < prio)
 	{
 		return NULL;
 	}
@@ -150,6 +157,7 @@ PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, voi
 
 	h->psp = psp;
 	h->prio = prio;
+	h->threshold = threshold;
 	h->phase = (uint8_t)PDOS_IDLE_PHASE;
 	h->wkUpTime = 0U;
 
@@ -221,8 +229,20 @@ static void PdOS_sched(void)
 
 	nextTask = PdOS_find_next_task();
 
+	// next task wants to preempt current task
+	// no need to compare (nextTask != currTask) as priorities are unique
+	if ((nextTask->prio > currTask->prio) && (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE))
+	{
+		// preemption allowed only when priority greater than threshold
+		if (nextTask->prio <= currTask->threshold)
+		{
+			// PendSV will not be triggered
+			return;
+		}
+	}
+
 	// record log of preemption / resume
-	if ((nextTask != currTask) && (nextTask != tasks[0]))
+	if ((nextTask != currTask) && (nextTask != tasks[0]) && (currTask != tasks[0]))
 	{
 		// CPU yield
 		if (nextTask->prio < currTask->prio)
@@ -236,7 +256,7 @@ static void PdOS_sched(void)
 		// preemption
 		else
 		{
-			if (currTask != tasks[0])
+			if (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
 			{
 				// add log: preempted task suspends execution
 				PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
@@ -275,7 +295,7 @@ PdOSErrCode PdOS_init(void)
 	// set PendSV priority to 0xFF
 	SET_PENDSV_PRIO(0xFFU);
 	// create idle task
-	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
+	idleTaskHandle = PdOS_create_task(&PdOS_idle_task_func, 0U, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
 	return (idleTaskHandle != NULL) ? PDOS_OK : PDOS_ERROR;
 }
 

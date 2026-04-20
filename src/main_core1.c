@@ -148,9 +148,9 @@ int main(void)
 
 	PdOS_init();
 
-	task1Handle = PdOS_create_task(&task1_func, 5U, task1Stack, sizeof(task1Stack), TASK1_MEM);
-	task2Handle = PdOS_create_task(&task2_func, 3U, task2Stack, sizeof(task2Stack), TASK2_MEM);
-	task3Handle = PdOS_create_task(&task3_func, 2U, task3Stack, sizeof(task3Stack), TASK3_MEM);
+	task1Handle = PdOS_create_task(&task1_func, 5U, 5U, task1Stack, sizeof(task1Stack), TASK1_MEM);
+	task2Handle = PdOS_create_task(&task2_func, 3U, 3U, task2Stack, sizeof(task2Stack), TASK2_MEM);
+	task3Handle = PdOS_create_task(&task3_func, 2U, 10U, task3Stack, sizeof(task3Stack), TASK3_MEM);
 
 	PdOS_run();
 }

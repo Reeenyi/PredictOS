@@ -29,7 +29,7 @@ typedef enum
 #define MEM_POOL_SIZE (4096U)
 
 // maximum size of core-local memory buffer
-#define MAX_LOCAL_MEM_SIZE (250U)
+#define MAX_LOCAL_MEM_SIZE (1000U)
 
 // maximum number of logs
 #define MAX_LOG_NUM (100U)
@@ -62,6 +62,7 @@ PdOSErrCode PdOS_init(void);
  * 
  * @param taskFunction pointer to task function
  * @param prio task priority (1~32, higher value for higher priority)
+ * @param threshold preemption threshold (no less than priority)
  * @param stkSto pointer to task stack
  * @param stkSize stack size
  * @param memSize maximum core-local memory usage
@@ -69,7 +70,7 @@ PdOSErrCode PdOS_init(void);
  * 
  * @note stack size needs to be at least 64 bytes (16 words)
  */
-PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, void *stkSto, uint32_t stkSize, uint32_t memSize);
+PdOSTaskHandle PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize);
 
 /**
  * @brief Set OS to run.
@@ -116,6 +117,8 @@ void *PdOS_read(uint32_t extraDelayTime);
  * @brief Copy data from core-local memory back to main memory.
  * 
  * @param extraDelayTime extra delay time
+ * 
+ * @note only call this function at the end of the task (before delayUntil)
  */
 void PdOS_write(uint32_t extraDelayTime);
 
