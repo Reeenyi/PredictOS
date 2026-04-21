@@ -20,8 +20,8 @@
 #define PENDSV_PRIO_BITMASK (0xFFU << PENDSV_PRIO_OFFSET)
 
 #define SET_PENDSV_PRIO(prio) \
-			(SHPR3_REG = (SHPR3_REG & ~PENDSV_PRIO_BITMASK) |	\
-            ((((uint32_t)(prio)) << PENDSV_PRIO_OFFSET) &		\
+            (SHPR3_REG = (SHPR3_REG & ~PENDSV_PRIO_BITMASK) |   \
+            ((((uint32_t)(prio)) << PENDSV_PRIO_OFFSET) &       \
             PENDSV_PRIO_BITMASK))
 
 #define GET_MAX_PRIO(x) (32U - __builtin_clz(x))
@@ -30,46 +30,46 @@
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
 
-// log event
-typedef enum _PdOSLogEventType
-{
-	PDOS_ENTER_READ 	= 0U,
-	PDOS_EXIT_READ 		= 1U,
-	PDOS_ENTER_EXECUTE 	= 2U,
-	PDOS_EXIT_EXECUTE 	= 3U,
-	PDOS_ENTER_WRITE 	= 4U,
-	PDOS_EXIT_WRITE 	= 5U
-} PdOSLogEventType;
-
 // task phases
 typedef enum _PdOSTaskPhaseType
 {
-	PDOS_IDLE_PHASE  	= 0U,
-	PDOS_READ_PHASE 	= 1U,
-	PDOS_EXECUTE_PHASE 	= 2U,
-	PDOS_WRITE_PHASE 	= 3U
+    PDOS_IDLE_PHASE     = 0U,
+    PDOS_READ_PHASE     = 1U,
+    PDOS_EXECUTE_PHASE  = 2U,
+    PDOS_WRITE_PHASE    = 3U
 } PdOSTaskPhaseType;
 
-// Task Control Block
-struct PdOSTaskControlBlock
+// log event
+typedef enum _PdOSLogEventType
 {
-	void *psp;            	// stack pointer
-	uint32_t wkUpTime;    	// next wake up time
-	uint8_t prio;         	// priority
-	uint8_t threshold;		// preemption threshold
-	uint8_t phase;			// current phase
-	uint8_t preserve;  		// align by 4 bytes
-	uint32_t memStartIndex;	// start index in memory pool
-	uint32_t memSize;		// memory size
-};
+    PDOS_ENTER_READ     = 0U,
+    PDOS_EXIT_READ      = 1U,
+    PDOS_ENTER_EXECUTE  = 2U,
+    PDOS_EXIT_EXECUTE   = 3U,
+    PDOS_ENTER_WRITE    = 4U,
+    PDOS_EXIT_WRITE     = 5U
+} PdOSLogEventType;
+
+// Task Control Block
+typedef struct _PdOSTaskControlBlock
+{
+    void     *psp;            // stack pointer
+    uint32_t  wkUpTime;       // next wake up time
+    uint8_t   prio;           // priority
+    uint8_t   threshold;      // preemption threshold
+    uint8_t   phase;          // current phase
+    uint8_t   preserve;       // align by 4 bytes
+    uint32_t  memStartIndex;  // start index in memory pool
+    uint32_t  memSize;        // memory size
+} PdOSTaskControlBlock;
 
 // task handle
-typedef struct PdOSTaskControlBlock *PdOSTaskHandle;
+typedef PdOSTaskControlBlock *PdOSTaskHandle;
 
 extern uint32_t SystemCoreClock;
 
 // all these variables should be placed in core-local memory
-PDOS_DTCM static struct PdOSTaskControlBlock tcbPool[MAX_TASK_NUM + 1U] = {};
+PDOS_DTCM static PdOSTaskControlBlock tcbPool[MAX_TASK_NUM + 1U] = {};
 PDOS_DTCM static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
 PDOS_DTCM static volatile PdOSTaskHandle currTask = NULL;
 PDOS_DTCM static volatile PdOSTaskHandle nextTask = NULL;
@@ -93,249 +93,249 @@ PDOS_DTCM static uint32_t logIndex = 0U;
 // Add an entry to log.
 void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
 {
-	/* 
-	  log format:
-		systime(32 bits) - 0(16 bits) - priority(8 bits) - event(8 bits) 
-	*/
-	localLogBuffer[logIndex * 2] = systime;
-	localLogBuffer[logIndex * 2 + 1] = (uint32_t)((prio << 8) | ((uint8_t)logEvent));
-	logIndex = (logIndex + 1 < MAX_LOG_NUM) ? (logIndex + 1) : 0;
+    /* 
+      log format:
+        systime(32 bits) - 0(16 bits) - priority(8 bits) - event(8 bits) 
+    */
+    localLogBuffer[logIndex * 2] = systime;
+    localLogBuffer[logIndex * 2 + 1] = (uint32_t)((prio << 8) | ((uint8_t)logEvent));
+    logIndex = (logIndex + 1 < MAX_LOG_NUM) ? (logIndex + 1) : 0;
 }
 
 // Create a new task and return its handle.
 PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize)
 {
-	PdOSTaskHandle h;
-	uint32_t *psp;
+    PdOSTaskHandle h;
+    uint32_t *psp;
 
-	// stack size needs to be at least 64 bytes to store one frame
-	if ((stkSto == NULL) || (stkSize < 64U))
-	{
-		return PDOS_INVALID_PARAM;
-	}
+    // stack size needs to be at least 64 bytes to store one frame
+    if ((stkSto == NULL) || (stkSize < 64U))
+    {
+        return PDOS_INVALID_PARAM;
+    }
 
-	// requires an unique priority no greater than MAX_TASK_NUM
-	if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
-	{
-		return PDOS_INVALID_PARAM;
-	}
+    // requires an unique priority no greater than MAX_TASK_NUM
+    if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
+    {
+        return PDOS_INVALID_PARAM;
+    }
 
-	// preemption threshold needs to be no less than priority
-	if (threshold < prio)
-	{
-		return PDOS_INVALID_PARAM;
-	}
+    // preemption threshold needs to be no less than priority
+    if (threshold < prio)
+    {
+        return PDOS_INVALID_PARAM;
+    }
 
-	// ensure enough memory space
-	if ((memSize > MAX_LOCAL_MEM_SIZE) || (mainMemFreeIndex + memSize > MEM_POOL_SIZE))
-	{
-		return PDOS_ERROR;
-	}
+    // ensure enough memory space
+    if ((memSize > MAX_LOCAL_MEM_SIZE) || (mainMemFreeIndex + memSize > MEM_POOL_SIZE))
+    {
+        return PDOS_ERROR;
+    }
 
-	// stack top, aligned by 8 bytes
-	psp = (uint32_t *)(((uint32_t)stkSto + stkSize) & ~7U);
+    // stack top, aligned by 8 bytes
+    psp = (uint32_t *)(((uint32_t)stkSto + stkSize) & ~7U);
 
-	// hardware-stacked registers, corresponds to ARMv7-M
-	*(--psp) = (1U << 24);  // xPSR, THUMB bit set
-	*(--psp) = (uint32_t)taskFunction;  // PC
-	*(--psp) = 0x0000000EU;  // LR
-	*(--psp) = 0x0000000CU;  // R12
-	*(--psp) = 0x00000003U;  // R3
-	*(--psp) = 0x00000002U;  // R2
-	*(--psp) = 0x00000001U;  // R1
-	*(--psp) = 0x00000000U;  // R0
-	// software-saved registers
-	*(--psp) = 0x0000000BU;  // R11
-	*(--psp) = 0x0000000AU;  // R10
-	*(--psp) = 0x00000009U;  // R9
-	*(--psp) = 0x00000008U;  // R8
-	*(--psp) = 0x00000007U;  // R7
-	*(--psp) = 0x00000006U;  // R6
-	*(--psp) = 0x00000005U;  // R5
-	*(--psp) = 0x00000004U;  // R4
+    // hardware-stacked registers, corresponds to ARMv7-M
+    *(--psp) = (1U << 24);  // xPSR, THUMB bit set
+    *(--psp) = (uint32_t)taskFunction;  // PC
+    *(--psp) = 0x0000000EU;  // LR
+    *(--psp) = 0x0000000CU;  // R12
+    *(--psp) = 0x00000003U;  // R3
+    *(--psp) = 0x00000002U;  // R2
+    *(--psp) = 0x00000001U;  // R1
+    *(--psp) = 0x00000000U;  // R0
+    // software-saved registers
+    *(--psp) = 0x0000000BU;  // R11
+    *(--psp) = 0x0000000AU;  // R10
+    *(--psp) = 0x00000009U;  // R9
+    *(--psp) = 0x00000008U;  // R8
+    *(--psp) = 0x00000007U;  // R7
+    *(--psp) = 0x00000006U;  // R6
+    *(--psp) = 0x00000005U;  // R5
+    *(--psp) = 0x00000004U;  // R4
 
-	// save TCB to pool
-	h = &tcbPool[prio];
+    // save TCB to pool
+    h = &tcbPool[prio];
 
-	h->psp = psp;
-	h->prio = prio;
-	h->threshold = threshold;
-	h->phase = (uint8_t)PDOS_IDLE_PHASE;
-	h->wkUpTime = 0U;
+    h->psp = psp;
+    h->prio = prio;
+    h->threshold = threshold;
+    h->phase = (uint8_t)PDOS_IDLE_PHASE;
+    h->wkUpTime = 0U;
 
-	// allocate space in main memory
-	h->memSize = memSize;
-	h->memStartIndex = mainMemFreeIndex;
-	mainMemFreeIndex += memSize;
-	
-	tasks[prio] = h;
+    // allocate space in main memory
+    h->memSize = memSize;
+    h->memStartIndex = mainMemFreeIndex;
+    mainMemFreeIndex += memSize;
+    
+    tasks[prio] = h;
 
-	if (prio > 0U)
-	{
-		// set the new task ready to run
-		readySet |= (1U << (prio - 1U));
-	}
+    if (prio > 0U)
+    {
+        // set the new task ready to run
+        readySet |= (1U << (prio - 1U));
+    }
 
-	return PDOS_OK;
+    return PDOS_OK;
 }
 
 // Find the highest-priority available task.
 static PdOSTaskHandle PdOS_find_next_task(void)
 {
-	uint32_t tmpReadySet = readySet;
-	uint32_t maxPrio;
-	PdOSTaskHandle t;
+    uint32_t tmpReadySet = readySet;
+    uint32_t maxPrio;
+    PdOSTaskHandle t;
 
-	while (tmpReadySet != 0U)
-	{
-		maxPrio = GET_MAX_PRIO(tmpReadySet);
-		t = tasks[maxPrio];
+    while (tmpReadySet != 0U)
+    {
+        maxPrio = GET_MAX_PRIO(tmpReadySet);
+        t = tasks[maxPrio];
 
-		// if the current task is already running, keep it running,
-		// and don't need to check free memory space
-		if (t == currTask)
-		{
-			return t;
-		}
+        // if the current task is already running, keep it running,
+        // and don't need to check free memory space
+        if (t == currTask)
+        {
+            return t;
+        }
 
-		// a task is allowed to run only when there is enough space in core-local memory
-		if (localMemFreeIndex + t->memSize <= MAX_LOCAL_MEM_SIZE)
-		{
-			return t;
-		}
+        // a task is allowed to run only when there is enough space in core-local memory
+        if (localMemFreeIndex + t->memSize <= MAX_LOCAL_MEM_SIZE)
+        {
+            return t;
+        }
 
-		tmpReadySet &= ~(1U << (maxPrio - 1U));
-	}
+        tmpReadySet &= ~(1U << (maxPrio - 1U));
+    }
 
-	// return idle task when no task is available
-	return tasks[0];
+    // return idle task when no task is available
+    return tasks[0];
 }
 
 // Schedule the next task to run.
 // Needs to be called in a critical section.
 static void PdOS_sched(void)
 {
-	// on init
-	if (currTask == NULL)
-	{
-		nextTask = PdOS_find_next_task();
-		ICSR_REG |= PENDSVSET_BITMASK;
-		return;
-	}
+    // on init
+    if (currTask == NULL)
+    {
+        nextTask = PdOS_find_next_task();
+        ICSR_REG |= PENDSVSET_BITMASK;
+        return;
+    }
 
-	// memory phases cannot be preempted
-	if ((currTask->phase == (uint8_t)PDOS_READ_PHASE) || (currTask->phase == (uint8_t)PDOS_WRITE_PHASE))
-	{
-		return;
-	}
+    // memory phases cannot be preempted
+    if ((currTask->phase == (uint8_t)PDOS_READ_PHASE) || (currTask->phase == (uint8_t)PDOS_WRITE_PHASE))
+    {
+        return;
+    }
 
-	nextTask = PdOS_find_next_task();
+    nextTask = PdOS_find_next_task();
 
-	// next task wants to preempt current task
-	// no need to compare (nextTask != currTask) as priorities are unique
-	if ((nextTask->prio > currTask->prio) && (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE))
-	{
-		// preemption allowed only when priority greater than threshold
-		if (nextTask->prio <= currTask->threshold)
-		{
-			// PendSV will not be triggered
-			return;
-		}
-	}
+    // next task wants to preempt current task
+    // no need to compare (nextTask != currTask) as priorities are unique
+    if ((nextTask->prio > currTask->prio) && (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE))
+    {
+        // preemption allowed only when priority greater than threshold
+        if (nextTask->prio <= currTask->threshold)
+        {
+            // PendSV will not be triggered
+            return;
+        }
+    }
 
-	// record log of preemption / resume
-	if ((nextTask != currTask) && (nextTask != tasks[0]) && (currTask != tasks[0]))
-	{
-		// CPU yield
-		if (nextTask->prio < currTask->prio)
-		{
-			if (nextTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
-			{
-				// add log: preempted task resumes execution
-				PdOS_add_log(nextTask->prio, PDOS_ENTER_EXECUTE);
-			}
-		}
-		// preemption
-		else
-		{
-			if (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
-			{
-				// add log: preempted task suspends execution
-				PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
-			}
-		}
-	}
+    // record log of preemption / resume
+    if ((nextTask != currTask) && (nextTask != tasks[0]) && (currTask != tasks[0]))
+    {
+        // CPU yield
+        if (nextTask->prio < currTask->prio)
+        {
+            if (nextTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
+            {
+                // add log: preempted task resumes execution
+                PdOS_add_log(nextTask->prio, PDOS_ENTER_EXECUTE);
+            }
+        }
+        // preemption
+        else
+        {
+            if (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
+            {
+                // add log: preempted task suspends execution
+                PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
+            }
+        }
+    }
 
-	if (nextTask != currTask)
-	{
-		// trigger the PendSV interrupt
-		ICSR_REG |= PENDSVSET_BITMASK;
-	}
+    if (nextTask != currTask)
+    {
+        // trigger the PendSV interrupt
+        ICSR_REG |= PENDSVSET_BITMASK;
+    }
 }
 
 // Idle task function.
 static void PdOS_idle_task_func(void)
 {
-	while (1)
-	{
-		// yield CPU when having task ready
-		// used in fully non-preemptive mode
-		if (readySet != 0U)
-		{
-			__disable_irq();
-			PdOS_sched();
-			__enable_irq();
-		}
-	}
+    while (1)
+    {
+        // yield CPU when having task ready
+        // used in fully non-preemptive mode
+        if (readySet != 0U)
+        {
+            __disable_irq();
+            PdOS_sched();
+            __enable_irq();
+        }
+    }
 }
 
 // Initialize OS.
 PdOSErrCode PdOS_init(void)
 {
-	// set PendSV priority to 0xFF
-	SET_PENDSV_PRIO(0xFFU);
+    // set PendSV priority to 0xFF
+    SET_PENDSV_PRIO(0xFFU);
 
-	// create idle task
-	return PdOS_create_task(&PdOS_idle_task_func, 0U, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
+    // create idle task
+    return PdOS_create_task(&PdOS_idle_task_func, 0U, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
 }
 
 // Get current system time.
 uint32_t PdOS_get_systime(void)
 {
-	return systime;
+    return systime;
 }
 
 // Block current task and switch away.
 // Needs to be called in a critical section.
 static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 {
-	uint32_t bitmask;
+    uint32_t bitmask;
 
-	bitmask = 1U << (currTask->prio - 1U);
-	currTask->wkUpTime = nextWkUpTime;
-	readySet &= ~bitmask;
-	blockedSet |= bitmask;
-	PdOS_sched();  // switch away from the current task
+    bitmask = 1U << (currTask->prio - 1U);
+    currTask->wkUpTime = nextWkUpTime;
+    readySet &= ~bitmask;
+    blockedSet |= bitmask;
+    PdOS_sched();  // switch away from the current task
 }
 
 // Busy wait for a relative time (keep CPU).
 void PdOS_busy_wait(uint32_t ticks)
 {
 #if USE_BUSY_WAIT_DUMMY == 1U
-	// busy wait by executing dummy cycles
-	uint32_t i;
-	for (i = 0U; i < ticks * DUMMY_CYC_PER_SEC; i++)
-	{
-		/* busy wait */
-	}
+    // busy wait by executing dummy cycles
+    uint32_t i;
+    for (i = 0U; i < ticks * DUMMY_CYC_PER_SEC; i++)
+    {
+        /* busy wait */
+    }
 
 #else
-	// busy wait by waiting systick
-	uint32_t releaseTime = systime + ticks;
-	while ((int32_t)(releaseTime - systime) >= 0)
-	{
-		/* busy wait */
-	}
+    // busy wait by waiting systick
+    uint32_t releaseTime = systime + ticks;
+    while ((int32_t)(releaseTime - systime) >= 0)
+    {
+        /* busy wait */
+    }
 
 #endif
 }
@@ -343,84 +343,84 @@ void PdOS_busy_wait(uint32_t ticks)
 // Delay for a relative time (yield CPU).
 void PdOS_delay(uint32_t ticks)
 {
-	// idle task should not be blocked
-	// ticks should not be zero, otherwise underflow will occur
-	if ((currTask == tasks[0]) || (ticks == 0U))
-	{
-		return;
-	}
+    // idle task should not be blocked
+    // ticks should not be zero, otherwise underflow will occur
+    if ((currTask == tasks[0]) || (ticks == 0U))
+    {
+        return;
+    }
 
-	__disable_irq();
-	PdOS_block_curr_task(systime + ticks);
-	__enable_irq();
+    __disable_irq();
+    PdOS_block_curr_task(systime + ticks);
+    __enable_irq();
 }
 
 // Delay until a specific absolute time (yield CPU).
 void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
 {
-	uint32_t nextWkUpTime;
+    uint32_t nextWkUpTime;
 
-	// handle illegal cases. similar with above
-	if ((currTask == tasks[0]) || (period == 0U) || (prevWkUpTime == NULL))
-	{
-		return;
-	}
+    // handle illegal cases. similar with above
+    if ((currTask == tasks[0]) || (period == 0U) || (prevWkUpTime == NULL))
+    {
+        return;
+    }
 
-	__disable_irq();
+    __disable_irq();
 
-	nextWkUpTime = *prevWkUpTime + period;
-	*prevWkUpTime = nextWkUpTime;
+    nextWkUpTime = *prevWkUpTime + period;
+    *prevWkUpTime = nextWkUpTime;
 
-	// deadline already missed
-	if ((int32_t)(systime - nextWkUpTime) >= 0)
-	{
-		__enable_irq();
-		return;
-	}
-	
-	PdOS_block_curr_task(nextWkUpTime);
+    // deadline already missed
+    if ((int32_t)(systime - nextWkUpTime) >= 0)
+    {
+        __enable_irq();
+        return;
+    }
+    
+    PdOS_block_curr_task(nextWkUpTime);
 
-	__enable_irq();
+    __enable_irq();
 }
 
 // Maintain systime and ready/blocked set
 static void PdOS_tick(void)
 {
-	PdOSTaskHandle h;
-	uint32_t bitmask;
-	uint32_t tmpBlockedSet = blockedSet;
+    PdOSTaskHandle h;
+    uint32_t bitmask;
+    uint32_t tmpBlockedSet = blockedSet;
 
-	systime++;
-	
-	while (tmpBlockedSet != 0U)
-	{
-		h = tasks[GET_MAX_PRIO(tmpBlockedSet)];
-		bitmask = (1U << (h->prio - 1U));
+    systime++;
+    
+    while (tmpBlockedSet != 0U)
+    {
+        h = tasks[GET_MAX_PRIO(tmpBlockedSet)];
+        bitmask = (1U << (h->prio - 1U));
 
-		// convert to signed integer to handle systime overflow
-		if ((int32_t)(systime - h->wkUpTime) >= 0)
-		{
-			readySet |= bitmask;
-			blockedSet &= ~bitmask;
-		}
-		tmpBlockedSet &= ~bitmask;
-	}
-	
-	// no need to call the scheduler explicitly,
-	// as it is called at the end of every systick
+        // convert to signed integer to handle systime overflow
+        if ((int32_t)(systime - h->wkUpTime) >= 0)
+        {
+            readySet |= bitmask;
+            blockedSet &= ~bitmask;
+        }
+        tmpBlockedSet &= ~bitmask;
+    }
+    
+    // no need to call the scheduler explicitly,
+    // as it is called at the end of every systick
 }
 
 // Callback function for systick.
 static void PdOS_systick_callback(systick_driver_t *sdp)
 {
-	(void)sdp;
-	PdOS_tick();
+    (void)sdp;
+    PdOS_tick();
 
 // call scheduler at every systick only when preemptions are allowed
 #if ALLOW_PREEMPTION == 1U
-	__disable_irq();
-	PdOS_sched();
-	__enable_irq();
+    __disable_irq();
+    PdOS_sched();
+    __enable_irq();
 #endif
 
 }
@@ -428,66 +428,66 @@ static void PdOS_systick_callback(systick_driver_t *sdp)
 // Initialize systick.
 static void PdOS_set_systick(void)
 {
-	systick_init(&DRV_SYSTICK);
-	systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
-	systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));
-	systick_set_cb(&DRV_SYSTICK, PdOS_systick_callback);
-	systick_start(&DRV_SYSTICK);
+    systick_init(&DRV_SYSTICK);
+    systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
+    systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));
+    systick_set_cb(&DRV_SYSTICK, PdOS_systick_callback);
+    systick_start(&DRV_SYSTICK);
 }
 
 // Set OS to run.
 void PdOS_run()
 {
-	PdOS_set_systick();
+    PdOS_set_systick();
 
-	// call the scheduler explicitly to transfer control to the RTOS
-	__disable_irq();	
-	PdOS_sched();
-	__enable_irq();
+    // call the scheduler explicitly to transfer control to the RTOS
+    __disable_irq();
+    PdOS_sched();
+    __enable_irq();
 
-	// the following code should never execute
-	while (1);
+    // the following code should never execute
+    while (1);
 }
 
 // Copy data from main memory to core-local memory.
 void *PdOS_read(uint32_t extraDelayTime)
 {
-	uint8_t *currLocalMem;
-	
-	currTask->phase = (uint8_t)PDOS_READ_PHASE;
-	PdOS_add_log(currTask->prio, PDOS_ENTER_READ);
+    uint8_t *currLocalMem;
+    
+    currTask->phase = (uint8_t)PDOS_READ_PHASE;
+    PdOS_add_log(currTask->prio, PDOS_ENTER_READ);
 
-	currLocalMem = localMem + localMemFreeIndex;
-	localMemFreeIndex += currTask->memSize;
-	memcpy((void *)currLocalMem, (void *)&memPool[currTask->memStartIndex], currTask->memSize);
-	PdOS_busy_wait(extraDelayTime);
-	
-	PdOS_add_log(currTask->prio, PDOS_EXIT_READ);
+    currLocalMem = localMem + localMemFreeIndex;
+    localMemFreeIndex += currTask->memSize;
+    memcpy((void *)currLocalMem, (void *)&memPool[currTask->memStartIndex], currTask->memSize);
+    PdOS_busy_wait(extraDelayTime);
+    
+    PdOS_add_log(currTask->prio, PDOS_EXIT_READ);
 
-	currTask->phase = (uint8_t)PDOS_EXECUTE_PHASE;
-	PdOS_add_log(currTask->prio, PDOS_ENTER_EXECUTE);
+    currTask->phase = (uint8_t)PDOS_EXECUTE_PHASE;
+    PdOS_add_log(currTask->prio, PDOS_ENTER_EXECUTE);
 
-	return (void *)currLocalMem;
+    return (void *)currLocalMem;
 }
 
 // Copy data from core-local memory back to main memory.
 void PdOS_write(uint32_t extraDelayTime)
 {
-	uint8_t *currLocalMem;
-	
-	currTask->phase = (uint8_t)PDOS_WRITE_PHASE;
-	PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
-	PdOS_add_log(currTask->prio, PDOS_ENTER_WRITE);
+    uint8_t *currLocalMem;
+    
+    currTask->phase = (uint8_t)PDOS_WRITE_PHASE;
+    PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
+    PdOS_add_log(currTask->prio, PDOS_ENTER_WRITE);
 
-	localMemFreeIndex -= currTask->memSize;
-	currLocalMem = localMem + localMemFreeIndex;
-	memcpy((void *)&memPool[currTask->memStartIndex], (void *)currLocalMem, currTask->memSize);
-	// also copy log to main memory in WRITE phase
-	memcpy((void *)logBuffer, (void *)localLogBuffer, sizeof(localLogBuffer));
-	PdOS_busy_wait(extraDelayTime);
+    localMemFreeIndex -= currTask->memSize;
+    currLocalMem = localMem + localMemFreeIndex;
+    memcpy((void *)&memPool[currTask->memStartIndex], (void *)currLocalMem, currTask->memSize);
+    // also copy log to main memory in WRITE phase
+    memcpy((void *)logBuffer, (void *)localLogBuffer, sizeof(localLogBuffer));
+    PdOS_busy_wait(extraDelayTime);
 
-	currTask->phase = (uint8_t)PDOS_IDLE_PHASE;
-	PdOS_add_log(currTask->prio, PDOS_EXIT_WRITE);
+    currTask->phase = (uint8_t)PDOS_IDLE_PHASE;
+    PdOS_add_log(currTask->prio, PDOS_EXIT_WRITE);
 }
 
 // Assembly function for context switch.

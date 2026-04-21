@@ -15,9 +15,9 @@
 // error code
 typedef enum
 {
-	PDOS_OK = 0U,
-	PDOS_ERROR = 1U,
-	PDOS_INVALID_PARAM = 2U
+    PDOS_OK             = 0U,
+    PDOS_ERROR          = 1U,
+    PDOS_INVALID_PARAM  = 2U
 } PdOSErrCode;
 
 // maximum task number. should be no more than 32

@@ -7,83 +7,74 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-#define TASK_LIST																						\
-	/*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/	\
-	X(1 , 66U  , 128U    , 100U     , 5U      , 5U       , 2U       , 5U       , 2U        , 30U    )	\
-	X(2 , 77U  , 128U    , 200U     , 3U      , 3U       , 6U       , 10U      , 5U        , 120U   )	\
-	X(3 , 88U  , 128U    , 100U     , 2U      , 2U       , 8U       , 20U      , 10U       , 200U   )
+#define TASK_LIST                                                                                     \
+    /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
+    X(1 , 66U  , 128U    , 100U     , 5U      , 5U       , 2U       , 5U       , 2U        , 30U    ) \
+    X(2 , 77U  , 128U    , 200U     , 3U      , 3U       , 6U       , 10U      , 5U        , 120U   ) \
+    X(3 , 88U  , 128U    , 100U     , 2U      , 2U       , 8U       , 20U      , 10U       , 200U   )
 
 #define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
-																\
-PDOS_DTCM uint32_t task##ID##Stack[STACK_SIZE];					\
-																\
-PDOS_ITCM void task##ID##_func(void)							\
-{																\
-	uint32_t i;													\
-	uint32_t prevWkUpTime = PdOS_get_systime();					\
-	uint8_t *localMem;											\
-	uint8_t magicNum;											\
-	uint8_t prevMagicNum = MAGIC_NUMBER;						\
-																\
-	localMem = PdOS_read(0U);									\
-	for (i = 0U; i < MEMORY_USAGE; i++)							\
-	{															\
-		localMem[i] = prevMagicNum;								\
-	}															\
-	PdOS_write(0U);												\
-																\
-	while (1)													\
-	{															\
-		localMem = PdOS_read(READ_TIME);						\
-																\
-		magicNum = prevMagicNum + 1U;							\
-		for (i = 0U; i < MEMORY_USAGE; i++)						\
-		{														\
-			if (localMem[i] != prevMagicNum)					\
-			{													\
-				/* data unexpected */							\
-				while (1);										\
-			}													\
-			localMem[i] = magicNum;								\
-		}														\
-		prevMagicNum = magicNum;								\
-		PdOS_busy_wait(EXECUTE_TIME);							\
-																\
-		PdOS_write(WRITE_TIME);									\
-																\
-		PdOS_delayUntil(&prevWkUpTime, PERIOD);					\
-	}															\
+                                                                \
+PDOS_DTCM uint32_t task##ID##Stack[STACK_SIZE];                 \
+                                                                \
+PDOS_ITCM void task##ID##_func(void)                            \
+{                                                               \
+    uint32_t i;                                                 \
+    uint32_t prevWkUpTime = PdOS_get_systime();                 \
+    uint8_t *localMem;                                          \
+    uint8_t magicNum;                                           \
+    uint8_t prevMagicNum = MAGIC_NUMBER;                        \
+                                                                \
+    localMem = PdOS_read(0U);                                   \
+    for (i = 0U; i < MEMORY_USAGE; i++)                         \
+    {                                                           \
+        localMem[i] = prevMagicNum;                             \
+    }                                                           \
+    PdOS_write(0U);                                             \
+                                                                \
+    while (1)                                                   \
+    {                                                           \
+        localMem = PdOS_read(READ_TIME);                        \
+                                                                \
+        magicNum = prevMagicNum + 1U;                           \
+        for (i = 0U; i < MEMORY_USAGE; i++)                     \
+        {                                                       \
+            if (localMem[i] != prevMagicNum)                    \
+            {                                                   \
+                /* data unexpected */                           \
+                while (1);                                      \
+            }                                                   \
+            localMem[i] = magicNum;                             \
+        }                                                       \
+        prevMagicNum = magicNum;                                \
+        PdOS_busy_wait(EXECUTE_TIME);                           \
+                                                                \
+        PdOS_write(WRITE_TIME);                                 \
+                                                                \
+        PdOS_delayUntil(&prevWkUpTime, PERIOD);                 \
+    }                                                           \
 }
 
-#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD)	\
-	DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD)
+#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+    DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD)
 
 TASK_LIST
 #undef X
 
 int main(void)
 {
-    test_env_init((TestInit_t)
-                  (TEST_INIT_CLOCK    |
-                   TEST_INIT_GPIO     |
-                   TEST_INIT_BOARD    |
-                   TEST_INIT_IRQ));
+    test_env_init((TestInit_t)(TEST_INIT_CLOCK | TEST_INIT_GPIO | TEST_INIT_BOARD | TEST_INIT_IRQ));
 
-	/* Switch-off user leds.*/
-	USER_LED_SWITCH_OFF(USER_LED_A);
-	USER_LED_SWITCH_OFF(USER_LED_B);
-
-
-	PdOS_init();
+    PdOS_init();
 
 #define X(ID, MAGIC_NUMBER, STACK_SIZE, MEM_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
-	if (PdOS_create_task(&task##ID##_func, PRIORITY, THRESHOLD, task##ID##Stack, sizeof(task##ID##Stack), MEM_USAGE) != PDOS_OK) \
-	{				\
-		while (1);	\
-	}
+    if (PdOS_create_task(&task##ID##_func, PRIORITY, THRESHOLD, task##ID##Stack, sizeof(task##ID##Stack), MEM_USAGE) != PDOS_OK) \
+    {               \
+        while (1);  \
+    }
 
 TASK_LIST
 #undef X
 
-	PdOS_run();
+    PdOS_run();
 }
