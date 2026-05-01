@@ -20,7 +20,7 @@ PDOS_DTCM uint32_t task##ID##Stack[STACK_SIZE];                 \
 PDOS_ITCM void task##ID##_func(void)                            \
 {                                                               \
     uint32_t i;                                                 \
-    uint32_t prevWkUpTime = PdOS_get_systime();                 \
+    uint32_t prevWkUpTime = 0U;                                 \
     uint8_t *localMem;                                          \
     uint8_t magicNum;                                           \
     uint8_t prevMagicNum = MAGIC_NUMBER;                        \
@@ -31,6 +31,7 @@ PDOS_ITCM void task##ID##_func(void)                            \
         localMem[i] = prevMagicNum;                             \
     }                                                           \
     PdOS_write(0U);                                             \
+    PdOS_delayUntil(&prevWkUpTime, PERIOD);                     \
                                                                 \
     while (1)                                                   \
     {                                                           \

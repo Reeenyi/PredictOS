@@ -93,6 +93,9 @@ static uint32_t logBuffer[MAX_LOG_NUM * 2] = {};
 PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
 
+// stop at designated time. for debugging usage
+volatile uint32_t bkPtTime = 2820;
+
 // Add an entry to log.
 void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
 {
@@ -431,6 +434,12 @@ static void PdOS_tick(void)
     PdOSTaskHandle h;
     uint32_t bitmask;
     uint32_t tmpBlockedSet = blockedSet;
+
+    if (unlikely(systime == bkPtTime))
+    {
+        // place a breakpoint here if want to stop at designated time
+        __NOP();
+    }
 
     systime++;
     
