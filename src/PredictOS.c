@@ -101,10 +101,17 @@ void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
 {
     /* 
       log format:
-        systime(32 bits) - 0(16 bits) - priority(8 bits) - event(8 bits) 
+        systime(32 bits) - currIterTime(16 bits) - priority(8 bits) - event(8 bits)
+     --> release time can be caculated by systime - currIterTime
     */
+    uint32_t currIterTime;
+    
     localLogBuffer[logIndex * 2] = systime;
     localLogBuffer[logIndex * 2 + 1] = (uint32_t)((prio << 8) | ((uint8_t)logEvent));
+    
+    currIterTime = systime - tasks[prio]->wkUpTime;
+    localLogBuffer[logIndex * 2 + 1] |= (currIterTime << 16);
+    
     logIndex = (logIndex + 1 < MAX_LOG_NUM) ? (logIndex + 1) : 0;
 }
 

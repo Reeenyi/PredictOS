@@ -102,6 +102,8 @@ void PdOS_delay(uint32_t ticks);
  * 
  * @param prevWkUpTime previous wake up time. should be initialized by PdOS_get_systime
  * @param period task period
+ * 
+ * @note period should not exceed 65535 for log recording
  */
 void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period);
 
