@@ -53,7 +53,7 @@ typedef enum _PdOSLogEventType
     PDOS_EXIT_WRITE     = 5U
 } PdOSLogEventType;
 
-// Task Control Block
+// task control block
 typedef struct _PdOSTaskControlBlock
 {
     void     *psp;            // stack pointer
@@ -78,7 +78,7 @@ PDOS_DTCM static volatile PdOSTaskHandle currTask = NULL;
 PDOS_DTCM static volatile PdOSTaskHandle nextTask = NULL;
 PDOS_DTCM static uint32_t readySet = 0U;
 PDOS_DTCM static uint32_t blockedSet = 0U;
-PDOS_DTCM static uint32_t idleTaskStack[32];
+PDOS_DTCM static uint32_t idleTaskStack[32U];
 PDOS_DTCM static volatile uint32_t systime = 0U;
 
 // memory pool in main memory (monotonic allocated)
@@ -89,15 +89,15 @@ PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];
 PDOS_DTCM static uint32_t localMemFreeIndex = 0U;
 
 // circular buffer for log storage
-static uint32_t logBuffer[MAX_LOG_NUM * 2] = {};
-PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2] = {};
+static uint32_t logBuffer[MAX_LOG_NUM * 2U] = {};
+PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2U] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
 
 // stop at designated time. for debugging usage
-volatile uint32_t bkPtTime = 2820;
+volatile uint32_t bkPtTime = 3000U;
 
 // Add an entry to log.
-void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
+static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
 {
     /* 
       log format:
@@ -106,16 +106,16 @@ void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
     */
     uint32_t currIterTime;
     
-    localLogBuffer[logIndex * 2] = systime;
-    localLogBuffer[logIndex * 2 + 1] = (uint32_t)((prio << 8) | ((uint8_t)logEvent));
+    localLogBuffer[logIndex * 2U] = systime;
+    localLogBuffer[logIndex * 2U + 1U] = (uint32_t)((prio << 8U) | ((uint8_t)logEvent));
     
     currIterTime = systime - tasks[prio]->wkUpTime;
-    localLogBuffer[logIndex * 2 + 1] |= (currIterTime << 16);
+    localLogBuffer[logIndex * 2U + 1U] |= (currIterTime << 16U);
     
-    logIndex = (logIndex + 1 < MAX_LOG_NUM) ? (logIndex + 1) : 0;
+    logIndex = (logIndex + 1U < MAX_LOG_NUM) ? (logIndex + 1U) : 0U;
 }
 
-// Create a new task and return its handle.
+// Create a new task.
 PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize)
 {
     PdOSTaskHandle h;
@@ -149,7 +149,7 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
     psp = (uint32_t *)(((uint32_t)stkSto + stkSize) & ~7U);
 
     // hardware-stacked registers, corresponds to ARMv7-M
-    *(--psp) = (1U << 24);  // xPSR, THUMB bit set
+    *(--psp) = (1U << 24U);  // xPSR, THUMB bit set
     *(--psp) = (uint32_t)taskFunction;  // PC
     *(--psp) = 0x0000000EU;  // LR
     *(--psp) = 0x0000000CU;  // R12
@@ -192,8 +192,8 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
     return PDOS_OK;
 }
 
-// Find the highest-priority available task.
-static PdOSTaskHandle PdOS_find_next_task(void)
+// Find available task with the highest nominal priority.
+static PdOSTaskHandle PdOS_find_hi_prio_avail_task(void)
 {
     uint32_t tmpReadySet = readySet;
     uint32_t maxPrio;
@@ -220,11 +220,11 @@ static PdOSTaskHandle PdOS_find_next_task(void)
     }
 
     // return idle task when no task is available
-    return tasks[0];
+    return tasks[0U];
 }
 
-// find pending task with the highest threshold
-// no need to check memory availability here, as pending tasks are already in core-local memory
+// Find pending task with the highest threshold.
+// No need to check memory availability here, as pending tasks are already in core-local memory.
 static PdOSTaskHandle PdOS_find_hi_thres_pending_task(void)
 {
     uint32_t tmpReadySet = readySet;
@@ -259,7 +259,7 @@ static void PdOS_sched(void)
     // on init
     if (unlikely(currTask == NULL))
     {
-        nextTask = PdOS_find_next_task();
+        nextTask = PdOS_find_hi_prio_avail_task();
         ICSR_REG |= PENDSVSET_BITMASK;
         return;
     }
@@ -270,18 +270,21 @@ static void PdOS_sched(void)
         return;
     }
 
-    nextTask = PdOS_find_next_task();
+    // assume nextTask is the task with highest nominal priority and adjust later
+    nextTask = PdOS_find_hi_prio_avail_task();
     if (nextTask == currTask)
     {
         return;
     }
 
+    // nextTask wants to switch context
     // preemption path    
     if (nextTask->prio > currTask->prio)
     {
-        // preemption allowed only when priority greater than threshold
+        // preemption not allowed when priority <= threshold
         if ((currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE) && (nextTask->prio <= currTask->threshold))
         {
+            // return and pendSV will not be triggered
             return;
         }
     }
@@ -289,7 +292,7 @@ static void PdOS_sched(void)
     else
     {
         // prio of running tasks are escalated to their thresholds.
-        // nextTask = max{prio of all tasks, threshold of running tasks}.
+        // thus nextTask = max{nominal prio of all tasks, threshold of running tasks}.
         pendingTask = PdOS_find_hi_thres_pending_task();
         if ((nextTask != pendingTask) && (pendingTask->threshold >= nextTask->prio))
         {
@@ -299,7 +302,7 @@ static void PdOS_sched(void)
     }
 
     // record log of preemption / resume
-    if ((nextTask != tasks[0]) && (currTask != tasks[0]))
+    if ((nextTask != tasks[0U]) && (currTask != tasks[0U]))
     {
         // preemption path
         if (nextTask->prio > currTask->prio)
@@ -397,7 +400,7 @@ void PdOS_delay(uint32_t ticks)
 {
     // idle task should not be blocked
     // ticks should not be zero, otherwise underflow will occur
-    if (unlikely((currTask == tasks[0]) || (ticks == 0U)))
+    if (unlikely((currTask == tasks[0U]) || (ticks == 0U)))
     {
         return;
     }
@@ -413,7 +416,7 @@ void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
     uint32_t nextWkUpTime;
 
     // handle illegal cases. similar with above
-    if (unlikely((currTask == tasks[0]) || (period == 0U) || (prevWkUpTime == NULL)))
+    if (unlikely((currTask == tasks[0U]) || (period == 0U) || (prevWkUpTime == NULL)))
     {
         return;
     }
@@ -558,14 +561,14 @@ __attribute__((naked)) void PendSV_Handler(void)
         "  LDR           r1, [r2, #0]        \n"  // r1 = currTask
         "  CBZ           r1, PendSV_restore  \n"  // if null, skip save
 
-        /* save context */
+        // save context
         "  MRS           r0, psp             \n"  // read PSP
         "  STMDB         r0!, {r4-r11}       \n"  // store R4~R11 according to PSP
 
         "  STR           r0, [r1, #0]        \n"  // currTask->psp = PSP now
 
         "PendSV_restore:                     \n"
-        /* restore context */
+        // restore context
         "  LDR           r2, =nextTask       \n"
         "  LDR           r1, [r2, #0]        \n"  // r1 = nextTask
         "  LDR           r0, [r1, #0]        \n"  // r0 = nextTask->psp
@@ -573,7 +576,7 @@ __attribute__((naked)) void PendSV_Handler(void)
         "  LDMIA         r0!, {r4-r11}       \n"  // restore R4~R11 according to PSP
         "  MSR           psp, r0             \n"  // update PSP
 
-        /* currTask = nextTask */
+        // currTask = nextTask
         "  LDR           r2, =currTask       \n"
         "  STR           r1, [r2, #0]        \n"
 

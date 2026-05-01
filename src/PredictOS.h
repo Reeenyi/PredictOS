@@ -56,7 +56,7 @@ typedef void (*PdOSTaskFunction)(void);
 PdOSErrCode PdOS_init(void);
 
 /**
- * @brief Create a new task and return its handle.
+ * @brief Create a new task.
  * 
  * @param taskFunction pointer to task function
  * @param prio task priority (1~32, higher value for higher priority)
