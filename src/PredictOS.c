@@ -191,9 +191,8 @@ static PdOSTaskHandle PdOS_find_next_task(void)
         maxPrio = GET_MAX_PRIO(tmpReadySet);
         t = tasks[maxPrio];
 
-        // if the current task is already running, keep it running,
-        // and don't need to check free memory space
-        if (t == currTask)
+        // if a task has already started, no need to check memory availability
+        if (t->phase == (uint8_t)PDOS_EXECUTE_PHASE)
         {
             return t;
         }
@@ -211,10 +210,39 @@ static PdOSTaskHandle PdOS_find_next_task(void)
     return tasks[0];
 }
 
+// find pending task with the highest threshold
+// no need to check memory availability here, as pending tasks are already in core-local memory
+static PdOSTaskHandle PdOS_find_hi_thres_pending_task(void)
+{
+    uint32_t tmpReadySet = readySet;
+    uint32_t currIndex;
+    uint32_t maxIndex = 0U;
+    PdOSTaskHandle t;
+
+    while (tmpReadySet != 0U)
+    {
+        currIndex = GET_MAX_PRIO(tmpReadySet);
+        t = tasks[currIndex];
+
+        // if threshold equals, comparation is based on prio
+        // (use > not >= so that lo-prio task will not be maxIndex)
+        if ((t->phase == (uint8_t)PDOS_EXECUTE_PHASE) && (t->threshold > tasks[maxIndex]->threshold))
+        {
+            maxIndex = currIndex;
+        }
+
+        tmpReadySet &= ~(1U << (currIndex - 1U));
+    }
+
+    return tasks[maxIndex];
+}
+
 // Schedule the next task to run.
 // Needs to be called in a critical section.
 static void PdOS_sched(void)
 {
+    PdOSTaskHandle pendingTask;
+
     // on init
     if (currTask == NULL)
     {
@@ -230,33 +258,38 @@ static void PdOS_sched(void)
     }
 
     nextTask = PdOS_find_next_task();
+    if (nextTask == currTask)
+    {
+        return;
+    }
 
-    // next task wants to preempt current task
-    // no need to compare (nextTask != currTask) as priorities are unique
-    if ((nextTask->prio > currTask->prio) && (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE))
+    // preemption path    
+    if (nextTask->prio > currTask->prio)
     {
         // preemption allowed only when priority greater than threshold
-        if (nextTask->prio <= currTask->threshold)
+        if ((currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE) && (nextTask->prio <= currTask->threshold))
         {
-            // PendSV will not be triggered
             return;
         }
     }
+    // CPU yield path
+    else
+    {
+        // prio of running tasks are escalated to their thresholds.
+        // nextTask = max{prio of all tasks, threshold of running tasks}.
+        pendingTask = PdOS_find_hi_thres_pending_task();
+        if ((nextTask != pendingTask) && (pendingTask->threshold >= nextTask->prio))
+        {
+            nextTask = pendingTask;
+        }
+        // nextTask != currTask in all cases of CPU yield. so no need to add if statement afterward
+    }
 
     // record log of preemption / resume
-    if ((nextTask != currTask) && (nextTask != tasks[0]) && (currTask != tasks[0]))
+    if ((nextTask != tasks[0]) && (currTask != tasks[0]))
     {
-        // CPU yield
-        if (nextTask->prio < currTask->prio)
-        {
-            if (nextTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
-            {
-                // add log: preempted task resumes execution
-                PdOS_add_log(nextTask->prio, PDOS_ENTER_EXECUTE);
-            }
-        }
-        // preemption
-        else
+        // preemption path
+        if (nextTask->prio > currTask->prio)
         {
             if (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
             {
@@ -264,13 +297,19 @@ static void PdOS_sched(void)
                 PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
             }
         }
+        // CPU yield path
+        else
+        {
+            if (nextTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
+            {
+                // add log: preempted task resumes execution
+                PdOS_add_log(nextTask->prio, PDOS_ENTER_EXECUTE);
+            }
+        }
     }
 
-    if (nextTask != currTask)
-    {
-        // trigger the PendSV interrupt
-        ICSR_REG |= PENDSVSET_BITMASK;
-    }
+    // trigger the PendSV interrupt
+    ICSR_REG |= PENDSVSET_BITMASK;
 }
 
 // Idle task function.

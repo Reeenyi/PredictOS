@@ -11,7 +11,7 @@
     /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
     X(1 , 66U  , 128U    , 100U     , 5U      , 5U       , 2U       , 5U       , 2U        , 30U    ) \
     X(2 , 77U  , 128U    , 200U     , 3U      , 3U       , 6U       , 10U      , 5U        , 120U   ) \
-    X(3 , 88U  , 128U    , 100U     , 2U      , 2U       , 8U       , 20U      , 10U       , 200U   )
+    X(3 , 88U  , 128U    , 100U     , 2U      , 4U       , 8U       , 20U      , 10U       , 200U   )
 
 #define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
                                                                 \
