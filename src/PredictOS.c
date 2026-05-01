@@ -26,6 +26,9 @@
 
 #define GET_MAX_PRIO(x) (32U - __builtin_clz(x))
 
+#define likely(x)   __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 #if MAX_TASK_NUM > 32U
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
@@ -109,25 +112,25 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
     uint32_t *psp;
 
     // stack size needs to be at least 64 bytes to store one frame
-    if ((stkSto == NULL) || (stkSize < 64U))
+    if (unlikely((stkSto == NULL) || (stkSize < 64U)))
     {
         return PDOS_INVALID_PARAM;
     }
 
     // requires an unique priority no greater than MAX_TASK_NUM
-    if ((prio > MAX_TASK_NUM) || (tasks[prio] != NULL))
+    if (unlikely((prio > MAX_TASK_NUM) || (tasks[prio] != NULL)))
     {
         return PDOS_INVALID_PARAM;
     }
 
     // preemption threshold needs to be no less than priority
-    if (threshold < prio)
+    if (unlikely(threshold < prio))
     {
         return PDOS_INVALID_PARAM;
     }
 
     // ensure enough memory space
-    if ((memSize > MAX_LOCAL_MEM_SIZE) || (mainMemFreeIndex + memSize > MEM_POOL_SIZE))
+    if (unlikely((memSize > MAX_LOCAL_MEM_SIZE) || (mainMemFreeIndex + memSize > MEM_POOL_SIZE)))
     {
         return PDOS_ERROR;
     }
@@ -170,7 +173,7 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
     
     tasks[prio] = h;
 
-    if (prio > 0U)
+    if (likely(prio > 0U))
     {
         // set the new task ready to run
         readySet |= (1U << (prio - 1U));
@@ -224,7 +227,7 @@ static PdOSTaskHandle PdOS_find_hi_thres_pending_task(void)
         currIndex = GET_MAX_PRIO(tmpReadySet);
         t = tasks[currIndex];
 
-        // if threshold equals, comparation is based on prio
+        // when threshold equals, comparation is based on prio
         // (use > not >= so that lo-prio task will not be maxIndex)
         if ((t->phase == (uint8_t)PDOS_EXECUTE_PHASE) && (t->threshold > tasks[maxIndex]->threshold))
         {
@@ -244,7 +247,7 @@ static void PdOS_sched(void)
     PdOSTaskHandle pendingTask;
 
     // on init
-    if (currTask == NULL)
+    if (unlikely(currTask == NULL))
     {
         nextTask = PdOS_find_next_task();
         ICSR_REG |= PENDSVSET_BITMASK;
@@ -384,7 +387,7 @@ void PdOS_delay(uint32_t ticks)
 {
     // idle task should not be blocked
     // ticks should not be zero, otherwise underflow will occur
-    if ((currTask == tasks[0]) || (ticks == 0U))
+    if (unlikely((currTask == tasks[0]) || (ticks == 0U)))
     {
         return;
     }
@@ -400,7 +403,7 @@ void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
     uint32_t nextWkUpTime;
 
     // handle illegal cases. similar with above
-    if ((currTask == tasks[0]) || (period == 0U) || (prevWkUpTime == NULL))
+    if (unlikely((currTask == tasks[0]) || (period == 0U) || (prevWkUpTime == NULL)))
     {
         return;
     }
@@ -411,7 +414,7 @@ void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
     *prevWkUpTime = nextWkUpTime;
 
     // deadline already missed
-    if ((int32_t)(systime - nextWkUpTime) >= 0)
+    if (unlikely((int32_t)(systime - nextWkUpTime) >= 0))
     {
         __enable_irq();
         return;
