@@ -12,6 +12,14 @@
 // Place in DTCM. Applies to variables.
 #define PDOS_DTCM __attribute__((section(".dtcm")))
 
+#define PDOS_CORE1_MAIN_MEM_BASE (0x2401C000UL)
+#define PDOS_CORE1_MAIN_MEM_SIZE (0x2000U)
+
+#define PDOS_CORE2_MAIN_MEM_BASE (0x2401E000UL)
+#define PDOS_CORE2_MAIN_MEM_SIZE (0x2000U)
+
+#define PDOS_ARB_SHM_BASE (0x2403C000UL)
+
 // error code
 typedef enum
 {
@@ -33,7 +41,7 @@ typedef enum
 #define MAX_LOCAL_MEM_SIZE (1000U)
 
 // maximum number of logs
-#define MAX_LOG_NUM (100U)
+#define MAX_LOG_NUM (256U)
 
 // fully preemptive / fully non-preemptive
 #define ALLOW_PREEMPTION (1U)

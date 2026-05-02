@@ -44,9 +44,11 @@ APP_NAME := $(PROJECTNAME)
 ifeq ($(CONFIG_TARGET_CORE), core1)
 C_SRCS += \
 	src/main_core1.c
+C_DEFS += PDOS_CURR_CORE_ID=1
 else
 C_SRCS += \
 	src/main_core2.c
+C_DEFS += PDOS_CURR_CORE_ID=2
 endif
 	
 C_SRCS += \
@@ -62,7 +64,7 @@ C_SRCS += \
 # 	src-gen/ \
 # 	src-gen/$(CONFIG_DEVICE)
 C_INCS += \
-	src/PredictOS.h
+	src/
 
 ################################################################################
 # Linker file

@@ -165,7 +165,7 @@ SECTIONS
 
     . = ALIGN(16);
     __heap_base__ = .;
-    __heap_end__  = ORIGIN(EMBED_RAM) + LENGTH(EMBED_RAM);
+    __heap_end__  = ORIGIN(EMBED_RAM) + LENGTH(EMBED_RAM) - 0x4000;  /* preserve 16k on both cores */
 
 
 /* The following variable are used to clean-up the memory at boot time.

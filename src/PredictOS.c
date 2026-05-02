@@ -29,6 +29,10 @@
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#if (!defined(PDOS_CURR_CORE_ID)) || ((PDOS_CURR_CORE_ID != 1) && (PDOS_CURR_CORE_ID != 2))
+#error "Core ID invalid!"
+#endif
+
 #if MAX_TASK_NUM > 32U
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
@@ -71,7 +75,7 @@ typedef PdOSTaskControlBlock *PdOSTaskHandle;
 
 extern uint32_t SystemCoreClock;
 
-// all these variables should be placed in core-local memory
+// all variables should be placed in core-local memory
 PDOS_DTCM static PdOSTaskControlBlock tcbPool[MAX_TASK_NUM + 1U] = {};
 PDOS_DTCM static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
 PDOS_DTCM static volatile PdOSTaskHandle currTask = NULL;
@@ -81,20 +85,39 @@ PDOS_DTCM static uint32_t blockedSet = 0U;
 PDOS_DTCM static uint32_t idleTaskStack[32U];
 PDOS_DTCM static volatile uint32_t systime = 0U;
 
-// memory pool in main memory (monotonic allocated)
-static uint8_t memPool[MEM_POOL_SIZE];
-PDOS_DTCM static uint32_t mainMemFreeIndex = 0U;
-// local memory for task execution
-PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];
+// memory in local and main memory
+PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];  // local memory for task execution
 PDOS_DTCM static uint32_t localMemFreeIndex = 0U;
+//  (def later)  uint8_t *memPool;  // memory pool in main memory (monotonic allocated)
+PDOS_DTCM static uint32_t mainMemFreeIndex = 0U;
 
 // circular buffer for log storage
-static uint32_t logBuffer[MAX_LOG_NUM * 2U] = {};
 PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2U] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
+//  (def later)  uint32_t *logBuffer;  // log buffer in main memory
+
+#if PDOS_CURR_CORE_ID == 1
+
+#if MEM_POOL_SIZE + MAX_LOG_NUM * 2 > PDOS_CORE1_MAIN_MEM_SIZE
+#error "Core 1 memory requirement too high"
+#endif
+
+PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_CORE1_MAIN_MEM_BASE;
+PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_CORE1_MAIN_MEM_BASE + MEM_POOL_SIZE);
+
+#else
+
+#if MEM_POOL_SIZE + MAX_LOG_NUM * 2 > PDOS_CORE2_MAIN_MEM_SIZE
+#error "Core 2 memory requirement too high"
+#endif
+
+PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_CORE2_MAIN_MEM_BASE;
+PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_CORE2_MAIN_MEM_BASE + MEM_POOL_SIZE);
+
+#endif
 
 // stop at designated time. for debugging usage
-volatile uint32_t bkPtTime = 3000U;
+PDOS_DTCM volatile uint32_t bkPtTime = 3000U;
 
 // Add an entry to log.
 static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
