@@ -9,36 +9,49 @@
 #include "PredictOS.h"
 #include <string.h>
 
-#define ICSR_ADDR (0xE000ED04U)
-#define ICSR_REG (*((volatile uint32_t *)ICSR_ADDR))
-#define PENDSVSET_OFFSET (28U)
-#define PENDSVSET_BITMASK (1U << PENDSVSET_OFFSET)
-
-#define SHPR3_ADDR (0xE000ED20U)
-#define SHPR3_REG (*((volatile uint32_t *)SHPR3_ADDR))
-#define PENDSV_PRIO_OFFSET (16U)
+// ICSR register for triggering PendSV interrupt
+#define ICSR_ADDR           (0xE000ED04U)
+#define ICSR_REG            (*((volatile uint32_t *)ICSR_ADDR))
+#define PENDSVSET_OFFSET    (28U)
+#define PENDSVSET_BITMASK   (1U << PENDSVSET_OFFSET)
+// SHPR3 register for setting PenSV interrupt priority
+#define SHPR3_ADDR          (0xE000ED20U)
+#define SHPR3_REG           (*((volatile uint32_t *)SHPR3_ADDR))
+#define PENDSV_PRIO_OFFSET  (16U)
 #define PENDSV_PRIO_BITMASK (0xFFU << PENDSV_PRIO_OFFSET)
+// hardware semaphore
+#define HSEM2_BASE          (0x44002C00UL)
+#define HSEM2_R0            (*(volatile uint32_t *)(HSEM2_BASE + 0x000))
+#define HSEM2_RLR0          (*(volatile uint32_t *)(HSEM2_BASE + 0x080))
+// specified HSEM core id
+#define HSEM_COREID_CORE1   (0x8U << 8)
+#define HSEM_COREID_CORE2   (0x1U << 8)
+#define HSEM_LOCK_BIT       (1UL  << 31)
 
-#define SET_PENDSV_PRIO(prio) \
-            (SHPR3_REG = (SHPR3_REG & ~PENDSV_PRIO_BITMASK) |   \
-            ((((uint32_t)(prio)) << PENDSV_PRIO_OFFSET) &       \
-            PENDSV_PRIO_BITMASK))
+#define GET_MAX_PRIO(x)     (32U - __builtin_clz(x))
 
-#define GET_MAX_PRIO(x) (32U - __builtin_clz(x))
-
-#define likely(x)   __builtin_expect(!!(x), 1)
-#define unlikely(x) __builtin_expect(!!(x), 0)
-
-#if (!defined(PDOS_CURR_CORE_ID)) || ((PDOS_CURR_CORE_ID != 1) && (PDOS_CURR_CORE_ID != 2))
-#error "Core ID invalid!"
-#endif
+#define likely(x)           __builtin_expect(!!(x), 1)
+#define unlikely(x)         __builtin_expect(!!(x), 0)
 
 #if MAX_TASK_NUM > 32U
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
 
-#define PDOS_USE_STOP_TIME 1
-#define PDOS_STOP_TIME (3000U)
+#if (!defined(PDOS_CURR_CORE_ID)) || ((PDOS_CURR_CORE_ID != 1) && (PDOS_CURR_CORE_ID != 2))
+#error "core ID invalid"
+#endif
+
+#if PDOS_CURR_CORE_ID == 1
+#define PDOS_MAIN_MEM_BASE PDOS_CORE1_MAIN_MEM_BASE
+#define PDOS_MAIN_MEM_SIZE PDOS_CORE1_MAIN_MEM_SIZE
+#else
+#define PDOS_MAIN_MEM_BASE PDOS_CORE2_MAIN_MEM_BASE
+#define PDOS_MAIN_MEM_SIZE PDOS_CORE2_MAIN_MEM_SIZE
+#endif
+
+#if MEM_POOL_SIZE + MAX_LOG_NUM * 2 > PDOS_MAIN_MEM_SIZE
+#error "memory requirement too high"
+#endif
 
 // task phases
 typedef enum _PdOSTaskPhaseType
@@ -76,6 +89,15 @@ typedef struct _PdOSTaskControlBlock
 // task handle
 typedef PdOSTaskControlBlock *PdOSTaskHandle;
 
+// arbiter data structure
+typedef struct
+{
+    volatile uint8_t req[2];    // request of two cores
+    volatile uint8_t prio[2];   // priorities
+} ArbiterType;
+
+#define ARBITER ((volatile ArbiterType *)PDOS_ARB_SHM_BASE)
+
 extern uint32_t SystemCoreClock;
 
 // all variables should be placed in core-local memory
@@ -91,33 +113,13 @@ PDOS_DTCM static volatile uint32_t systime = 0U;
 // memory in local and main memory
 PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];  // local memory for task execution
 PDOS_DTCM static uint32_t localMemFreeIndex = 0U;
-//  (def later)  uint8_t *memPool;  // memory pool in main memory (monotonic allocated)
+PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_MAIN_MEM_BASE;  // memory pool in main memory (monotonic allocated)
 PDOS_DTCM static uint32_t mainMemFreeIndex = 0U;
 
 // circular buffer for log storage
 PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2U] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
-//  (def later)  uint32_t *logBuffer;  // log buffer in main memory
-
-#if PDOS_CURR_CORE_ID == 1
-
-#if MEM_POOL_SIZE + MAX_LOG_NUM * 2 > PDOS_CORE1_MAIN_MEM_SIZE
-#error "Core 1 memory requirement too high"
-#endif
-
-PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_CORE1_MAIN_MEM_BASE;
-PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_CORE1_MAIN_MEM_BASE + MEM_POOL_SIZE);
-
-#else
-
-#if MEM_POOL_SIZE + MAX_LOG_NUM * 2 > PDOS_CORE2_MAIN_MEM_SIZE
-#error "Core 2 memory requirement too high"
-#endif
-
-PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_CORE2_MAIN_MEM_BASE;
-PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_CORE2_MAIN_MEM_BASE + MEM_POOL_SIZE);
-
-#endif
+PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_MAIN_MEM_BASE + MEM_POOL_SIZE);  // log buffer in main memory
 
 // Add an entry to log.
 static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
@@ -367,11 +369,24 @@ static void PdOS_idle_task_func(void)
     }
 }
 
+// Set priority of PendSV interrupt
+static inline void PdOS_set_pendsv_prio(uint8_t prio)
+{
+    uint32_t regVal = SHPR3_REG;
+
+    // clear pendSV prio bits
+    regVal &= ~PENDSV_PRIO_BITMASK;
+    // set new prio
+    regVal |= ((uint32_t)prio << PENDSV_PRIO_OFFSET);
+
+    SHPR3_REG = regVal;
+}
+
 // Initialize OS.
 PdOSErrCode PdOS_init(void)
 {
     // set PendSV priority to 0xFF
-    SET_PENDSV_PRIO(0xFFU);
+    PdOS_set_pendsv_prio(0xFFU);
 
     // create idle task
     return PdOS_create_task(&PdOS_idle_task_func, 0U, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
@@ -461,6 +476,90 @@ void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
     __enable_irq();
 }
 
+// Lock hardware semaphore.
+static inline void PdOS_HSEM_lock(void)
+{
+    uint32_t hsmCoreId = (PDOS_CURR_CORE_ID == 1) ? HSEM_COREID_CORE1 : HSEM_COREID_CORE2;
+    uint32_t expected;
+
+    // try to lock HSEM
+    expected = HSEM_LOCK_BIT | hsmCoreId;
+    while ((HSEM2_RLR0 & (HSEM_LOCK_BIT | 0xF00U)) != expected);
+}
+
+// Unlock hardware semaphore.
+static inline void PdOS_HSEM_unlock(void)
+{
+    uint32_t hsmCoreId = (PDOS_CURR_CORE_ID == 1) ? HSEM_COREID_CORE1 : HSEM_COREID_CORE2;
+
+    HSEM2_R0 = hsmCoreId;
+    __DSB();
+}
+
+// Acquire arbitration for shared memory access.
+static void PdOS_arbiter_acquire(uint8_t prio)
+{
+    uint8_t other = (PDOS_CURR_CORE_ID == 1) ? 2U : 1U;   
+    uint32_t i;
+
+    // write request and priority to arbiter
+    // write req after prio to ensure prio updated
+    ARBITER->prio[PDOS_CURR_CORE_ID - 1U] = prio;
+    __DSB();
+    ARBITER->req[PDOS_CURR_CORE_ID - 1U] = 1U;
+    __DSB();
+
+    for (i = 0U; i < PDOS_ARBITER_WAIT_WINDOW_ITER; i++)
+    {
+        if ((ARBITER->req[other - 1U] != 0U))
+        {
+            break;
+        }
+        __DSB();
+    }
+
+    // wait if the other core is requesting with a higher priority
+    while ((ARBITER->req[other - 1U] != 0U) && (ARBITER->prio[other - 1U] > prio))
+    {
+        // delay for a while to lower bus access frequency
+        for (i = 0; i < PDOS_ARBITER_BACKOFF_ITER; i++);
+
+        __DSB();
+    }
+
+    PdOS_HSEM_lock();
+}
+
+// Release shared memory access.
+static void PdOS_arbiter_release(void)
+{
+    PdOS_HSEM_unlock();
+
+    ARBITER->req[PDOS_CURR_CORE_ID - 1U] = 0U;
+    __DSB();
+}
+
+// Init arbiter for shared memory access.
+// should be called by the main core before starting the other core.
+void PdOS_arbiter_init(void)
+{
+#if PDOS_CURR_CORE_ID == 1
+
+    // clear arbiter data
+    ARBITER->req[0]  = 0U;
+    ARBITER->req[1]  = 0U;
+    ARBITER->prio[0] = 0U;
+    ARBITER->prio[1] = 0U;
+
+    // enable HSEM clock
+    RCC->AHB1LENR |= RCC_AHB1LENR_HSEM;
+
+    // lock HSEM for synchronizing systick on both cores
+    PdOS_HSEM_lock();
+
+#endif
+}
+
 // Maintain systime and ready/blocked set
 static void PdOS_tick(void)
 {
@@ -468,7 +567,7 @@ static void PdOS_tick(void)
     uint32_t bitmask;
     uint32_t tmpBlockedSet = blockedSet;
 
-#if PDOS_USE_STOP_TIME == 1
+#if PDOS_USE_STOP_TIME == 1U
     if (unlikely(systime >= PDOS_STOP_TIME))
     {
         // stop maintaining systime and halt the kernel
@@ -518,6 +617,19 @@ static void PdOS_set_systick(void)
     systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
     systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));
     systick_set_cb(&DRV_SYSTICK, PdOS_systick_callback);
+
+    // use HSEM to synchronize systick on two cores
+#if PDOS_CURR_CORE_ID == 1
+    // wait for a while to make sure that core 2 has started and is blocked by HSEM
+    PdOS_busy_wait(1U);
+    PdOS_HSEM_unlock();
+#else
+    // core 2 tries to acquire HSEM, and will be blocked.
+    PdOS_HSEM_lock();
+    PdOS_HSEM_unlock();
+#endif
+
+    // two cores should be synchronized here
     systick_start(&DRV_SYSTICK);
 }
 
@@ -540,6 +652,9 @@ void *PdOS_read(uint32_t extraDelayTime)
 {
     uint8_t *currLocalMem;
     
+    // acquire access to shared memory
+    PdOS_arbiter_acquire(currTask->prio);
+
     currTask->phase = (uint8_t)PDOS_READ_PHASE;
     PdOS_add_log(currTask->prio, PDOS_ENTER_READ);
 
@@ -549,6 +664,9 @@ void *PdOS_read(uint32_t extraDelayTime)
     PdOS_busy_wait(extraDelayTime);
     
     PdOS_add_log(currTask->prio, PDOS_EXIT_READ);
+
+    // finish access to shared memory
+    PdOS_arbiter_release();
 
     currTask->phase = (uint8_t)PDOS_EXECUTE_PHASE;
     PdOS_add_log(currTask->prio, PDOS_ENTER_EXECUTE);
@@ -560,6 +678,9 @@ void *PdOS_read(uint32_t extraDelayTime)
 void PdOS_write(uint32_t extraDelayTime)
 {
     uint8_t *currLocalMem;
+
+    // acquire access to shared memory
+    PdOS_arbiter_acquire(currTask->prio);
     
     currTask->phase = (uint8_t)PDOS_WRITE_PHASE;
     PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
@@ -571,6 +692,9 @@ void PdOS_write(uint32_t extraDelayTime)
     // also copy log to main memory in WRITE phase
     memcpy((void *)logBuffer, (void *)localLogBuffer, sizeof(localLogBuffer));
     PdOS_busy_wait(extraDelayTime);
+
+    // finish access to shared memory
+    PdOS_arbiter_release();
 
     currTask->phase = (uint8_t)PDOS_IDLE_PHASE;
     PdOS_add_log(currTask->prio, PDOS_EXIT_WRITE);

@@ -52,6 +52,16 @@ typedef enum
 // dummy cycles per second
 #define DUMMY_CYC_PER_SEC (37594U)
 
+// number of dummy cycles befor retrying to acquire
+#define PDOS_ARBITER_BACKOFF_ITER (3759U)    // approx. 0.1ms
+
+// number of dummy cycles for waiting another core to register
+#define PDOS_ARBITER_WAIT_WINDOW_ITER (376U)
+
+// halt the kernel at designated time
+#define PDOS_USE_STOP_TIME (1U)
+#define PDOS_STOP_TIME (3000U)
+
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);
 
@@ -131,5 +141,12 @@ void *PdOS_read(uint32_t extraDelayTime);
  * @note only call this function at the end of the task (before delayUntil)
  */
 void PdOS_write(uint32_t extraDelayTime);
+
+/**
+ * @brief Init arbiter for shared memory access.
+ * 
+ * @note should be called by the main core before starting the other core.
+ */
+void PdOS_arbiter_init(void);
 
 #endif /* SRC_PREDICTOS_H_ */

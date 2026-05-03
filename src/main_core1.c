@@ -9,9 +9,8 @@
 
 #define TASK_LIST                                                                                     \
     /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
-    X(1 , 66U  , 128U    , 100U     , 5U      , 5U       , 2U       , 5U       , 2U        , 30U    ) \
-    X(2 , 77U  , 128U    , 200U     , 3U      , 3U       , 6U       , 10U      , 5U        , 120U   ) \
-    X(3 , 88U  , 128U    , 100U     , 2U      , 4U       , 8U       , 20U      , 10U       , 200U   )
+    X(1 , 66U  , 128U    , 100U     , 6U      , 6U       , 2U       , 5U       , 2U        , 30U    ) \
+    X(2 , 77U  , 128U    , 200U     , 2U      , 2U       , 6U       , 10U      , 5U        , 120U   ) \
 
 #define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
                                                                 \
@@ -68,12 +67,14 @@ int main(void)
 {
     test_env_init((TestInit_t)(TEST_INIT_CLOCK | TEST_INIT_GPIO | TEST_INIT_BOARD | TEST_INIT_IRQ));
 
+    // call startup on main core before starting the other core
+    PdOS_arbiter_init();
+
     // start core 2
     RCC->C2_VTOR_INIT_REG  = 0x080F0000UL;
     RCC->C2_BOOT_CTRL_REG |= (RCC_C2_BOOT_CTRL_REG_C2_RES_RELEASE);
     RCC->C2_BOOT_CTRL_REG |= (RCC_C2_BOOT_CTRL_REG_C2_CPU_WAIT_RELEASE);
 
-    /*
     PdOS_init();
 
 #define X(ID, MAGIC_NUMBER, STACK_SIZE, MEM_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
@@ -86,10 +87,4 @@ TASK_LIST
 #undef X
 
     PdOS_run();
-    */
-
-    while (1)
-    {
-        //
-    }
 }
