@@ -68,6 +68,12 @@ int main(void)
 {
     test_env_init((TestInit_t)(TEST_INIT_CLOCK | TEST_INIT_GPIO | TEST_INIT_BOARD | TEST_INIT_IRQ));
 
+    // start core 2
+    RCC->C2_VTOR_INIT_REG  = 0x080F0000UL;
+    RCC->C2_BOOT_CTRL_REG |= (RCC_C2_BOOT_CTRL_REG_C2_RES_RELEASE);
+    RCC->C2_BOOT_CTRL_REG |= (RCC_C2_BOOT_CTRL_REG_C2_CPU_WAIT_RELEASE);
+
+    /*
     PdOS_init();
 
 #define X(ID, MAGIC_NUMBER, STACK_SIZE, MEM_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
@@ -80,4 +86,10 @@ TASK_LIST
 #undef X
 
     PdOS_run();
+    */
+
+    while (1)
+    {
+        //
+    }
 }

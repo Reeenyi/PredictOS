@@ -1,30 +1,83 @@
-/****************************************************************************
- *
- * Copyright (c) 2022 STMicroelectronics - All Rights Reserved
- *
- * License terms: STMicroelectronics Proprietary in accordance with licensing
- * terms SLA0098 at www.st.com.
- *
- * THIS SOFTWARE IS DISTRIBUTED "AS IS," AND ALL WARRANTIES ARE DISCLAIMED,
- * INCLUDING MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
- *
- *****************************************************************************/
+/**
+ * @file main_core2.c
+ * @author Yi Ren
+ * @brief Application code for core 2
+ */
 
 #include <test_env.h>
+#include "PredictOS.h"
+
+#define TASK_LIST                                                                                     \
+    /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
+    X(1 , 66U  , 128U    , 100U     , 5U      , 5U       , 2U       , 5U       , 2U        , 30U    ) \
+    X(2 , 77U  , 128U    , 200U     , 3U      , 3U       , 6U       , 10U      , 5U        , 120U   ) \
+    X(3 , 88U  , 128U    , 100U     , 2U      , 4U       , 8U       , 20U      , 10U       , 200U   )
+
+#define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+                                                                \
+PDOS_DTCM uint32_t task##ID##Stack[STACK_SIZE];                 \
+                                                                \
+PDOS_ITCM void task##ID##_func(void)                            \
+{                                                               \
+    uint32_t i;                                                 \
+    uint32_t prevWkUpTime = 0U;                                 \
+    uint8_t *localMem;                                          \
+    uint8_t magicNum;                                           \
+    uint8_t prevMagicNum = MAGIC_NUMBER;                        \
+                                                                \
+    /* first iteration */                                       \
+    localMem = PdOS_read(READ_TIME);                            \
+    for (i = 0U; i < MEMORY_USAGE; i++)                         \
+    {                                                           \
+        localMem[i] = prevMagicNum;                             \
+    }                                                           \
+    PdOS_busy_wait(EXECUTE_TIME);                               \
+    PdOS_write(WRITE_TIME);                                     \
+    PdOS_delayUntil(&prevWkUpTime, PERIOD);                     \
+                                                                \
+    while (1)                                                   \
+    {                                                           \
+        localMem = PdOS_read(READ_TIME);                        \
+                                                                \
+        magicNum = prevMagicNum + 1U;                           \
+        for (i = 0U; i < MEMORY_USAGE; i++)                     \
+        {                                                       \
+            if (localMem[i] != prevMagicNum)                    \
+            {                                                   \
+                /* data unexpected */                           \
+                while (1);                                      \
+            }                                                   \
+            localMem[i] = magicNum;                             \
+        }                                                       \
+        prevMagicNum = magicNum;                                \
+        PdOS_busy_wait(EXECUTE_TIME);                           \
+                                                                \
+        PdOS_write(WRITE_TIME);                                 \
+                                                                \
+        PdOS_delayUntil(&prevWkUpTime, PERIOD);                 \
+    }                                                           \
+}
+
+#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+    DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD)
+
+TASK_LIST
+#undef X
 
 int main(void)
 {
-    /* Enable interrupts.*/
-    osal_sys_unlock();
+    test_env_init((TestInit_t)(TEST_INIT_IRQ));
 
-    test_env_init((TestInit_t)
-                  (TEST_INIT_IRQ      |
-                   TEST_INIT_OSAL));
+    PdOS_init();
 
-    /* Application main loop */
-    for ( ; ; ) {
-        /* Blink USER_LED_B.*/
-        gpio_toggle_pin(USER_LED_B);
-        osal_delay_millisec(500U);
+#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEM_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+    if (PdOS_create_task(&task##ID##_func, PRIORITY, THRESHOLD, task##ID##Stack, sizeof(task##ID##Stack), MEM_USAGE) != PDOS_OK) \
+    {               \
+        while (1);  \
     }
+
+TASK_LIST
+#undef X
+
+    PdOS_run();
 }

@@ -84,6 +84,6 @@ include $(STELLAR_E_SDK_BUILD_SYSTEM_DIR)/StellarESDK.mk
 all:
 # Disable FPU to simplify the way CPU handles interrupts.
 	$(AT)$(MAKE) CONFIG_TARGET_CORE=core1 CONFIG_TARGET_MEMORY=nvm default-all CONFIG_FPU=no
-#	$(AT)$(MAKE) CONFIG_TARGET_CORE=core2 CONFIG_TARGET_MEMORY=nvm default-all
+	$(AT)$(MAKE) CONFIG_TARGET_CORE=core2 CONFIG_TARGET_MEMORY=nvm default-all CONFIG_FPU=no
 
 
