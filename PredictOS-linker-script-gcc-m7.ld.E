@@ -21,7 +21,7 @@ SECTIONS
 {
     startup : ALIGN(16) SUBALIGN(1024)
     {
-        /* KEEP(*(.vectors)) deleted. vector table loaded to .itcm instead of startup */
+        KEEP(*(.vectors))
         KEEP(*(.reset_handler))
     } > EMBED_NVM
 
@@ -83,13 +83,10 @@ SECTIONS
     } > EMBED_NVM
 
 
-    /* section .ictm needs to start at offset 0 for alignment of the vector table */
+    /* section .itcm needs to start at offset 0 for alignment of the vector table */
     .itcm ORIGIN(EMBED_ITCM) : ALIGN(16)
     {
         __itcm__ = . ;
-
-        /* place the vector table at the beginning of ITCM for alignment */
-        KEEP(*(.vectors))
 
         /* place SYSTICK and PredictOS in ITCM */
         *systick*.o(.text*)
