@@ -10,7 +10,7 @@
 #define TASK_LIST                                                                                     \
     /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
     X(1 , 66U  , 128U    , 100U     , 6U      , 6U       , 2U       , 5U       , 2U        , 30U    ) \
-    X(2 , 77U  , 128U    , 200U     , 2U      , 2U       , 6U       , 10U      , 5U        , 120U   ) \
+    X(2 , 77U  , 128U    , 200U     , 2U      , 2U       , 6U       , 10U      , 5U        , 120U   )
 
 #define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
                                                                 \
@@ -67,7 +67,7 @@ int main(void)
 {
     test_env_init((TestInit_t)(TEST_INIT_CLOCK | TEST_INIT_GPIO | TEST_INIT_BOARD | TEST_INIT_IRQ));
 
-    // call startup on main core before starting the other core
+    // call arbiter init on the main core before starting the other core
     PdOS_arbiter_init();
 
     // start core 2

@@ -77,11 +77,11 @@ typedef enum _PdOSLogEventType
 typedef struct _PdOSTaskControlBlock
 {
     void     *psp;            // stack pointer
-    uint32_t  wkUpTime;       // next wake up time
+    uint32_t  wkUpTime;       // next wake-up time
     uint8_t   prio;           // priority
     uint8_t   threshold;      // preemption threshold
     uint8_t   phase;          // current phase
-    uint8_t   preserve;       // align by 4 bytes
+    uint8_t   preserve;       // align to 4 bytes
     uint32_t  memStartIndex;  // start index in memory pool
     uint32_t  memSize;        // memory size
 } PdOSTaskControlBlock;
@@ -113,7 +113,7 @@ PDOS_DTCM static volatile uint32_t systime = 0U;
 // memory in local and main memory
 PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];  // local memory for task execution
 PDOS_DTCM static uint32_t localMemFreeIndex = 0U;
-PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_MAIN_MEM_BASE;  // memory pool in main memory (monotonic allocated)
+PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_MAIN_MEM_BASE;  // memory pool in main memory (monotonically allocated)
 PDOS_DTCM static uint32_t mainMemFreeIndex = 0U;
 
 // circular buffer for log storage
@@ -152,7 +152,7 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
         return PDOS_INVALID_PARAM;
     }
 
-    // requires an unique priority no greater than MAX_TASK_NUM
+    // requires a unique priority no greater than MAX_TASK_NUM
     if (unlikely((prio > MAX_TASK_NUM) || (tasks[prio] != NULL)))
     {
         return PDOS_INVALID_PARAM;
@@ -173,7 +173,7 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
     // stack top, aligned by 8 bytes
     psp = (uint32_t *)(((uint32_t)stkSto + stkSize) & ~7U);
 
-    // hardware-stacked registers, corresponds to ARMv7-M
+    // hardware-stacked registers, corresponding to ARMv7-M
     *(--psp) = (1U << 24U);  // xPSR, THUMB bit set
     *(--psp) = (uint32_t)taskFunction;  // PC
     *(--psp) = 0x0000000EU;  // LR
@@ -262,7 +262,7 @@ static PdOSTaskHandle PdOS_find_hi_thres_pending_task(void)
         currIndex = GET_MAX_PRIO(tmpReadySet);
         t = tasks[currIndex];
 
-        // when threshold equals, comparation is based on prio
+        // when thresholds are equal, comparasion is based on prio
         // (use > not >= so that lo-prio task will not be maxIndex)
         if ((t->phase == (uint8_t)PDOS_EXECUTE_PHASE) && (t->threshold > tasks[maxIndex]->threshold))
         {
@@ -358,7 +358,7 @@ static void PdOS_idle_task_func(void)
 {
     while (1)
     {
-        // yield CPU when having task ready
+        // yield CPU when a task is ready
         // used in fully non-preemptive mode
         if (readySet != 0U)
         {
@@ -453,7 +453,7 @@ void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period)
 {
     uint32_t nextWkUpTime;
 
-    // handle illegal cases. similar with above
+    // handle illegal cases. similar to PdOS_delay
     if (unlikely((currTask == tasks[0U]) || (period == 0U) || (prevWkUpTime == NULL)))
     {
         return;
@@ -503,7 +503,7 @@ static void PdOS_arbiter_acquire(uint8_t prio)
     uint32_t i;
 
     // write request and priority to arbiter
-    // write req after prio to ensure prio updated
+    // write req after prio to ensure prio is updated
     ARBITER->prio[PDOS_CURR_CORE_ID - 1U] = prio;
     __DSB();
     ARBITER->req[PDOS_CURR_CORE_ID - 1U] = 1U;
@@ -633,7 +633,7 @@ static void PdOS_set_systick(void)
     systick_start(&DRV_SYSTICK);
 }
 
-// Set OS to run.
+// Set the OS to run.
 void PdOS_run()
 {
     PdOS_set_systick();
@@ -704,7 +704,7 @@ void PdOS_write(uint32_t extraDelayTime)
 __attribute__((naked)) void PendSV_Handler(void)
 {
     __asm volatile (
-        "  CPSID         I                   \n"  // disable interrupt
+        "  CPSID         I                   \n"  // disable interrupts
 
         "  LDR           r2, =currTask       \n"
         "  LDR           r1, [r2, #0]        \n"  // r1 = currTask
@@ -729,7 +729,7 @@ __attribute__((naked)) void PendSV_Handler(void)
         "  LDR           r2, =currTask       \n"
         "  STR           r1, [r2, #0]        \n"
 
-        "  CPSIE         I                   \n"  // enable interrupt
+        "  CPSIE         I                   \n"  // enable interrupts
         "  BX            lr                  \n"
     );
 }

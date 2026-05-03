@@ -52,7 +52,7 @@ typedef enum
 // dummy cycles per second
 #define DUMMY_CYC_PER_SEC (37594U)
 
-// number of dummy cycles befor retrying to acquire
+// number of dummy cycles before retrying to acquire
 #define PDOS_ARBITER_BACKOFF_ITER (3759U)    // approx. 0.1ms
 
 // number of dummy cycles for waiting another core to register
@@ -91,7 +91,7 @@ PdOSErrCode PdOS_init(void);
 PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize);
 
 /**
- * @brief Set OS to run.
+ * @brief Set the OS to run.
  */
 void PdOS_run(void);
 
@@ -118,7 +118,7 @@ void PdOS_delay(uint32_t ticks);
 /**
  * @brief Delay until a specific absolute time (yield CPU).
  * 
- * @param prevWkUpTime previous wake up time. should be initialized by PdOS_get_systime
+ * @param prevWkUpTime previous wake-up time. should be initialized by PdOS_get_systime
  * @param period task period
  * 
  * @note period should not exceed 65535 for log recording
