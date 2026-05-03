@@ -25,12 +25,14 @@ PDOS_ITCM void task##ID##_func(void)                            \
     uint8_t magicNum;                                           \
     uint8_t prevMagicNum = MAGIC_NUMBER;                        \
                                                                 \
-    localMem = PdOS_read(0U);                                   \
+    /* first iteration */                                       \
+    localMem = PdOS_read(READ_TIME);                            \
     for (i = 0U; i < MEMORY_USAGE; i++)                         \
     {                                                           \
         localMem[i] = prevMagicNum;                             \
     }                                                           \
-    PdOS_write(0U);                                             \
+    PdOS_busy_wait(EXECUTE_TIME);                               \
+    PdOS_write(WRITE_TIME);                                     \
     PdOS_delayUntil(&prevWkUpTime, PERIOD);                     \
                                                                 \
     while (1)                                                   \

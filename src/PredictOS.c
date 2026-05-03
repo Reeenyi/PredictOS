@@ -37,6 +37,9 @@
 #error "MAX_TASK_NUM cannot exceed 32"
 #endif
 
+#define PDOS_USE_STOP_TIME 1
+#define PDOS_STOP_TIME (3000U)
+
 // task phases
 typedef enum _PdOSTaskPhaseType
 {
@@ -115,9 +118,6 @@ PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_CORE2_MAIN_MEM_BASE;
 PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_CORE2_MAIN_MEM_BASE + MEM_POOL_SIZE);
 
 #endif
-
-// stop at designated time. for debugging usage
-PDOS_DTCM volatile uint32_t bkPtTime = 3000U;
 
 // Add an entry to log.
 static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
@@ -468,11 +468,13 @@ static void PdOS_tick(void)
     uint32_t bitmask;
     uint32_t tmpBlockedSet = blockedSet;
 
-    if (unlikely(systime == bkPtTime))
+#if PDOS_USE_STOP_TIME == 1
+    if (unlikely(systime >= PDOS_STOP_TIME))
     {
-        // place a breakpoint here if want to stop at designated time
-        __NOP();
+        // stop maintaining systime and halt the kernel
+        return;
     }
+#endif
 
     systime++;
     
