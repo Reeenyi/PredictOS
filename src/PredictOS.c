@@ -149,6 +149,14 @@ static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
      --> release time can be caculated by systime - currIterTime
     */
     uint32_t currIterTime;
+
+#if PDOS_USE_STOP_TIME == 1
+    if (unlikely(systime >= PDOS_STOP_TIME))
+    {
+        // stop recording log after kernel halt
+        return;
+    }
+#endif
     
     localLogBuffer[logIndex * 2U] = systime;
     localLogBuffer[logIndex * 2U + 1U] = (uint32_t)((prio << 8U) | ((uint8_t)logEvent));
