@@ -9,12 +9,12 @@
 
 #define TASK_LIST                                                                                     \
     /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
-    X(1 , 66U  , 128U    , 100U     , 5U      , 5U       , 2U       , 5U       , 2U        , 30U    ) \
-    X(2 , 77U  , 128U    , 200U     , 3U      , 3U       , 6U       , 10U      , 5U        , 120U   )
+    X(1 , 66U  , 512U    , 100U     , 5U      , 5U       , 2U       , 5U       , 2U        , 30U    ) \
+    X(2 , 77U  , 512U    , 200U     , 3U      , 3U       , 6U       , 10U      , 5U        , 120U   )
 
 #define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
                                                                 \
-PDOS_DTCM uint32_t task##ID##Stack[STACK_SIZE];                 \
+PDOS_DTCM uint32_t task##ID##Stack[(STACK_SIZE + 3U) >> 2U];    \
                                                                 \
 PDOS_ITCM void task##ID##_func(void)                            \
 {                                                               \

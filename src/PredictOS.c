@@ -13,20 +13,20 @@
 #define ICSR_ADDR           (0xE000ED04U)
 #define ICSR_REG            (*((volatile uint32_t *)ICSR_ADDR))
 #define PENDSVSET_OFFSET    (28U)
-#define PENDSVSET_BITMASK   (1U << PENDSVSET_OFFSET)
+#define PENDSVSET_BIT       (1U << PENDSVSET_OFFSET)
 // SHPR3 register for setting PenSV interrupt priority
 #define SHPR3_ADDR          (0xE000ED20U)
 #define SHPR3_REG           (*((volatile uint32_t *)SHPR3_ADDR))
 #define PENDSV_PRIO_OFFSET  (16U)
 #define PENDSV_PRIO_BITMASK (0xFFU << PENDSV_PRIO_OFFSET)
 // hardware semaphore
-#define HSEM2_BASE          (0x44002C00UL)
-#define HSEM2_R0            (*(volatile uint32_t *)(HSEM2_BASE + 0x000))
-#define HSEM2_RLR0          (*(volatile uint32_t *)(HSEM2_BASE + 0x080))
+#define HSEM2_BASE          (0x44002C00U)
+#define HSEM2_R0            (*(volatile uint32_t *)(HSEM2_BASE + 0x000U))
+#define HSEM2_RLR0          (*(volatile uint32_t *)(HSEM2_BASE + 0x080U))
 // specified HSEM core id
-#define HSEM_COREID_CORE1   (0x8U << 8)
-#define HSEM_COREID_CORE2   (0x1U << 8)
-#define HSEM_LOCK_BIT       (1UL  << 31)
+#define HSEM_COREID_CORE1   (0x8U << 8U)
+#define HSEM_COREID_CORE2   (0x1U << 8U)
+#define HSEM_LOCK_BIT       (1U << 31U)
 
 #define GET_MAX_PRIO(x)     (32U - __builtin_clz(x))
 
@@ -34,7 +34,7 @@
 #define unlikely(x)         __builtin_expect(!!(x), 0)
 
 #if MAX_TASK_NUM > 32U
-#error "MAX_TASK_NUM cannot exceed 32"
+#error "maximum task number should not exceed 32"
 #endif
 
 #if (!defined(PDOS_CURR_CORE_ID)) || ((PDOS_CURR_CORE_ID != 1) && (PDOS_CURR_CORE_ID != 2))
@@ -49,7 +49,7 @@
 #define PDOS_MAIN_MEM_SIZE PDOS_CORE2_MAIN_MEM_SIZE
 #endif
 
-#if MEM_POOL_SIZE + MAX_LOG_NUM * 2 > PDOS_MAIN_MEM_SIZE
+#if MEM_POOL_SIZE + MAX_LOG_NUM * 2U > PDOS_MAIN_MEM_SIZE
 #error "memory requirement too high"
 #endif
 
@@ -92,8 +92,8 @@ typedef PdOSTaskControlBlock *PdOSTaskHandle;
 // arbiter data structure
 typedef struct
 {
-    volatile uint8_t req[2];    // request of two cores
-    volatile uint8_t prio[2];   // priorities
+    volatile uint8_t req[2U];    // request of two cores
+    volatile uint8_t prio[2U];   // priorities
 } ArbiterType;
 
 #define ARBITER ((volatile ArbiterType *)PDOS_ARB_SHM_BASE)
@@ -120,6 +120,25 @@ PDOS_DTCM static uint32_t mainMemFreeIndex = 0U;
 PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2U] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
 PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_MAIN_MEM_BASE + MEM_POOL_SIZE);  // log buffer in main memory
+
+// Set priority of PendSV interrupt.
+static inline void PdOS_set_pendsv_prio(uint8_t prio)
+{
+    uint32_t regVal = SHPR3_REG;
+
+    // clear pendSV prio bits
+    regVal &= ~PENDSV_PRIO_BITMASK;
+    // set new prio
+    regVal |= ((uint32_t)prio << PENDSV_PRIO_OFFSET);
+
+    SHPR3_REG = regVal;
+}
+
+// Trigger PendSV interrupt.
+static inline void PdOS_trigger_pendsv(void)
+{
+    ICSR_REG = PENDSVSET_BIT;
+}
 
 // Add an entry to log.
 static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
@@ -285,7 +304,7 @@ static void PdOS_sched(void)
     if (unlikely(currTask == NULL))
     {
         nextTask = PdOS_find_hi_prio_avail_task();
-        ICSR_REG |= PENDSVSET_BITMASK;
+        PdOS_trigger_pendsv();
         return;
     }
 
@@ -350,7 +369,7 @@ static void PdOS_sched(void)
     }
 
     // trigger the PendSV interrupt
-    ICSR_REG |= PENDSVSET_BITMASK;
+    PdOS_trigger_pendsv();
 }
 
 // Idle task function.
@@ -367,19 +386,6 @@ static void PdOS_idle_task_func(void)
             __enable_irq();
         }
     }
-}
-
-// Set priority of PendSV interrupt
-static inline void PdOS_set_pendsv_prio(uint8_t prio)
-{
-    uint32_t regVal = SHPR3_REG;
-
-    // clear pendSV prio bits
-    regVal &= ~PENDSV_PRIO_BITMASK;
-    // set new prio
-    regVal |= ((uint32_t)prio << PENDSV_PRIO_OFFSET);
-
-    SHPR3_REG = regVal;
 }
 
 // Initialize OS.
@@ -414,10 +420,10 @@ static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 // Busy wait for a relative time (keep CPU).
 void PdOS_busy_wait(uint32_t ticks)
 {
-#if USE_BUSY_WAIT_DUMMY == 1U
+#if USE_BUSY_WAIT_DUMMY == 1
     // busy wait by executing dummy cycles
     uint32_t i;
-    for (i = 0U; i < ticks * DUMMY_CYC_PER_SEC; i++)
+    for (i = 0U; i < ticks * DUMMY_CYC_PER_MS; i++)
     {
         /* busy wait */
     }
@@ -509,7 +515,7 @@ static void PdOS_arbiter_acquire(uint8_t prio)
     ARBITER->req[PDOS_CURR_CORE_ID - 1U] = 1U;
     __DSB();
 
-    for (i = 0U; i < PDOS_ARBITER_WAIT_WINDOW_ITER; i++)
+    for (i = 0U; i < PDOS_ARBITER_WAIT_WINDOW; i++)
     {
         if ((ARBITER->req[other - 1U] != 0U))
         {
@@ -522,7 +528,7 @@ static void PdOS_arbiter_acquire(uint8_t prio)
     while ((ARBITER->req[other - 1U] != 0U) && (ARBITER->prio[other - 1U] > prio))
     {
         // delay for a while to lower bus access frequency
-        for (i = 0; i < PDOS_ARBITER_BACKOFF_ITER; i++);
+        for (i = 0U; i < PDOS_ARBITER_BACKOFF_ITER; i++);
 
         __DSB();
     }
@@ -546,10 +552,10 @@ void PdOS_arbiter_init(void)
 #if PDOS_CURR_CORE_ID == 1
 
     // clear arbiter data
-    ARBITER->req[0]  = 0U;
-    ARBITER->req[1]  = 0U;
-    ARBITER->prio[0] = 0U;
-    ARBITER->prio[1] = 0U;
+    ARBITER->req[0U]  = 0U;
+    ARBITER->req[1U]  = 0U;
+    ARBITER->prio[0U] = 0U;
+    ARBITER->prio[1U] = 0U;
 
     // enable HSEM clock
     RCC->AHB1LENR |= RCC_AHB1LENR_HSEM;
@@ -567,7 +573,7 @@ static void PdOS_tick(void)
     uint32_t bitmask;
     uint32_t tmpBlockedSet = blockedSet;
 
-#if PDOS_USE_STOP_TIME == 1U
+#if PDOS_USE_STOP_TIME == 1
     if (unlikely(systime >= PDOS_STOP_TIME))
     {
         // stop maintaining systime and halt the kernel
@@ -590,9 +596,6 @@ static void PdOS_tick(void)
         }
         tmpBlockedSet &= ~bitmask;
     }
-    
-    // no need to call the scheduler explicitly,
-    // as it is called at the end of every systick
 }
 
 // Callback function for systick.
@@ -602,7 +605,7 @@ static void PdOS_systick_callback(systick_driver_t *sdp)
     PdOS_tick();
 
 // call scheduler at every systick only when preemptions are allowed
-#if ALLOW_PREEMPTION == 1U
+#if ALLOW_PREEMPTION == 1
     __disable_irq();
     PdOS_sched();
     __enable_irq();
@@ -700,7 +703,7 @@ void PdOS_write(uint32_t extraDelayTime)
     PdOS_add_log(currTask->prio, PDOS_EXIT_WRITE);
 }
 
-// Assembly function for context switch.
+// Assembly function for PendSV which handles context switch.
 __attribute__((naked)) void PendSV_Handler(void)
 {
     __asm volatile (

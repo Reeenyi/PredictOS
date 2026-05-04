@@ -7,18 +7,19 @@
 #ifndef SRC_PREDICTOS_H_
 #define SRC_PREDICTOS_H_
 
-// Place in ITCM. Applies to functions.
+// place in ITCM. applies to functions
 #define PDOS_ITCM __attribute__((section(".itcm")))
-// Place in DTCM. Applies to variables.
+// place in DTCM. applies to variables
 #define PDOS_DTCM __attribute__((section(".dtcm")))
 
-#define PDOS_CORE1_MAIN_MEM_BASE (0x2401C000UL)
-#define PDOS_CORE1_MAIN_MEM_SIZE (0x2000U)
+// use memory space preserved in linker script
+#define PDOS_CORE1_MAIN_MEM_BASE    (0x2401C000U)
+#define PDOS_CORE1_MAIN_MEM_SIZE    (0x2000U)
 
-#define PDOS_CORE2_MAIN_MEM_BASE (0x2401E000UL)
-#define PDOS_CORE2_MAIN_MEM_SIZE (0x2000U)
+#define PDOS_CORE2_MAIN_MEM_BASE    (0x2401E000U)
+#define PDOS_CORE2_MAIN_MEM_SIZE    (0x2000U)
 
-#define PDOS_ARB_SHM_BASE (0x2403C000UL)
+#define PDOS_ARB_SHM_BASE           (0x2403C000U)
 
 // error code
 typedef enum
@@ -28,39 +29,40 @@ typedef enum
     PDOS_INVALID_PARAM  = 2U
 } PdOSErrCode;
 
-// maximum task number. should be no more than 32
-#define MAX_TASK_NUM (32U)
+// maximum task number. should not exceed 32
+#define MAX_TASK_NUM                (32U)
 
 // systick frequency
-#define TICKS_PER_SECOND (1000U)
+#define TICKS_PER_SECOND            (1000U)
 
-// memory pool size in bytes
-#define MEM_POOL_SIZE (4096U)
+// memory pool size (in bytes)
+#define MEM_POOL_SIZE               (4096U)
 
-// maximum size of core-local memory buffer
-#define MAX_LOCAL_MEM_SIZE (1000U)
+// maximum size of core-local memory buffer (in bytes)
+#define MAX_LOCAL_MEM_SIZE          (1000U)
 
-// maximum number of logs
-#define MAX_LOG_NUM (256U)
+// maximum number of log entries
+// note: each entry requires 8 bytes
+#define MAX_LOG_NUM                 (256U)
 
-// fully preemptive / fully non-preemptive
-#define ALLOW_PREEMPTION (1U)
+// 1: limited preemptive / 0: fully non-preemptive
+#define ALLOW_PREEMPTION            (1)
 
-// 1 for using dummy cycles / 0 for waiting systick in busy wait
-#define USE_BUSY_WAIT_DUMMY (1U)
+// in busy wait, 1: use dummy cycles / 0: wait systick
+#define USE_BUSY_WAIT_DUMMY         (1)
 
-// dummy cycles per second
-#define DUMMY_CYC_PER_SEC (37594U)
+// dummy cycles per millisecond. use with USE_BUSY_WAIT_DUMMY=1
+#define DUMMY_CYC_PER_MS            (37594U)
 
-// number of dummy cycles before retrying to acquire
-#define PDOS_ARBITER_BACKOFF_ITER (3759U)    // approx. 0.1ms
+// number of dummy cycles before retry when arbitration lose
+#define PDOS_ARBITER_BACKOFF_ITER   (3759U)    // approx. 0.1ms
 
 // number of dummy cycles for waiting another core to register
-#define PDOS_ARBITER_WAIT_WINDOW_ITER (376U)
+#define PDOS_ARBITER_WAIT_WINDOW    (376U)
 
 // halt the kernel at designated time
-#define PDOS_USE_STOP_TIME (1U)
-#define PDOS_STOP_TIME (3000U)
+#define PDOS_USE_STOP_TIME          (1)
+#define PDOS_STOP_TIME              (3000U)
 
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);
@@ -78,15 +80,15 @@ PdOSErrCode PdOS_init(void);
  * 
  * @param taskFunction pointer to task function
  * @param prio task priority (1~32, higher value for higher priority)
- * @param threshold preemption threshold (no less than priority)
+ * @param threshold preemption threshold (>= priority)
  * @param stkSto pointer to task stack
- * @param stkSize stack size
- * @param memSize maximum core-local memory usage
+ * @param stkSize stack size (in bytes)
+ * @param memSize maximum core-local memory usage (in bytes)
  * @retval PDOS_OK success
  * @retval PDOS_ERROR fail
  * @retval PDOS_INVALID_PARAM invalid parameters
  * 
- * @note stack size needs to be at least 64 bytes (16 words)
+ * @note stack size needs to be at least 64 bytes
  */
 PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_t threshold, void *stkSto, uint32_t stkSize, uint32_t memSize);
 
@@ -118,10 +120,11 @@ void PdOS_delay(uint32_t ticks);
 /**
  * @brief Delay until a specific absolute time (yield CPU).
  * 
- * @param prevWkUpTime previous wake-up time. should be initialized by PdOS_get_systime
+ * @param prevWkUpTime previous wake-up time. should be initialized by user
  * @param period task period
  * 
- * @note period should not exceed 65535 for log recording
+ * @note period should not exceed 65535 for log recording.
+ *         period greater than 65535 still works, but log will fail
  */
 void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period);
 
@@ -130,6 +133,8 @@ void PdOS_delayUntil(uint32_t *prevWkUpTime, uint32_t period);
  * 
  * @param extraDelayTime extra delay time
  * @return void* start address of available core-local memory for tasks
+ * 
+ * @note only call this function at the beginning of the task
  */
 void *PdOS_read(uint32_t extraDelayTime);
 
@@ -145,7 +150,7 @@ void PdOS_write(uint32_t extraDelayTime);
 /**
  * @brief Init arbiter for shared memory access.
  * 
- * @note should be called by the main core before starting the other core.
+ * @note should be called by the main core before starting the other core
  */
 void PdOS_arbiter_init(void);
 
