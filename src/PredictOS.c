@@ -329,12 +329,14 @@ static void PdOS_sched(void)
         return;
     }
 
-    // nextTask wants to switch context
-    // preemption path    
-    if (nextTask->prio > currTask->prio)
+    // nextTask != currTask, i.e., nextTask wants to switch context
+
+    // preemption path
+    if (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
     {
+        // nextTask cannot be in execute phase in preemption path.
         // preemption not allowed when priority <= threshold
-        if ((currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE) && (nextTask->prio <= currTask->threshold))
+        if (nextTask->prio <= currTask->threshold)
         {
             // return and pendSV will not be triggered
             return;
@@ -357,13 +359,10 @@ static void PdOS_sched(void)
     if ((nextTask != tasks[0U]) && (currTask != tasks[0U]))
     {
         // preemption path
-        if (nextTask->prio > currTask->prio)
+        if (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
         {
-            if (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
-            {
-                // add log: preempted task suspends execution
-                PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
-            }
+            // add log: preempted task suspends execution
+            PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
         }
         // CPU yield path
         else
