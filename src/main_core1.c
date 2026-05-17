@@ -7,12 +7,14 @@
 #include <test_env.h>
 #include "PredictOS.h"
 
-#define TASK_LIST                                                                                     \
-    /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
-    X(1 , 66U  , 512U    , 100U     , 6U      , 6U       , 2U       , 5U       , 2U        , 30U    ) \
-    X(2 , 77U  , 512U    , 200U     , 2U      , 2U       , 6U       , 10U      , 5U        , 120U   )
+#define TASK_LIST                                                                                             \
+    /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, OFFSET, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
+    X(1 , 66U  , 512U    , 100U     , 3U      , 3U       , 50U   , 10U       , 20U      , 10U      , 160U   ) \
+    X(2 , 77U  , 512U    , 100U     , 2U      , 3U       , 20U   , 10U       , 10U      , 10U      , 240U   ) \
+    X(3 , 88U  , 512U    , 100U     , 1U      , 1U       , 0U    , 30U       , 130U     , 10U      , 320U   )
 
-#define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+
+#define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, OFFSET, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
                                                                 \
 PDOS_DTCM uint32_t task##ID##Stack[(STACK_SIZE + 3U) >> 2U];    \
                                                                 \
@@ -23,6 +25,9 @@ PDOS_ITCM void task##ID##_func(void)                            \
     uint8_t *localMem;                                          \
     uint8_t magicNum;                                           \
     uint8_t prevMagicNum = MAGIC_NUMBER;                        \
+                                                                \
+    /* initial offset */                                        \
+    PdOS_delayUntil(&prevWkUpTime, OFFSET);                     \
                                                                 \
     /* first iteration */                                       \
     localMem = PdOS_read(READ_TIME);                            \
@@ -57,8 +62,8 @@ PDOS_ITCM void task##ID##_func(void)                            \
     }                                                           \
 }
 
-#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
-    DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD)
+#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, PRIORITY, THRESHOLD, OFFSET, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+    DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, OFFSET, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD)
 
 TASK_LIST
 #undef X
@@ -71,13 +76,13 @@ int main(void)
     PdOS_arbiter_init();
 
     // start core 2
-    RCC->C2_VTOR_INIT_REG  = 0x080F0000U;
-    RCC->C2_BOOT_CTRL_REG |= (RCC_C2_BOOT_CTRL_REG_C2_RES_RELEASE);
-    RCC->C2_BOOT_CTRL_REG |= (RCC_C2_BOOT_CTRL_REG_C2_CPU_WAIT_RELEASE);
+    // RCC->C2_VTOR_INIT_REG  = 0x080F0000U;
+    // RCC->C2_BOOT_CTRL_REG |= (RCC_C2_BOOT_CTRL_REG_C2_RES_RELEASE);
+    // RCC->C2_BOOT_CTRL_REG |= (RCC_C2_BOOT_CTRL_REG_C2_CPU_WAIT_RELEASE);
 
     PdOS_init();
 
-#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEM_USAGE, PRIORITY, THRESHOLD, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
+#define X(ID, MAGIC_NUMBER, STACK_SIZE, MEM_USAGE, PRIORITY, THRESHOLD, OFFSET, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
     if (PdOS_create_task(&task##ID##_func, PRIORITY, THRESHOLD, task##ID##Stack, sizeof(task##ID##Stack), MEM_USAGE) != PDOS_OK) \
     {               \
         while (1);  \

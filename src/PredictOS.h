@@ -52,7 +52,7 @@ typedef enum
 #define USE_BUSY_WAIT_DUMMY         (1)
 
 // dummy cycles per millisecond. use with USE_BUSY_WAIT_DUMMY=1
-#define DUMMY_CYC_PER_MS            (37594U)
+#define DUMMY_CYC_PER_MS            (33500U)
 
 // number of dummy cycles before retry when arbitration lose
 #define PDOS_ARBITER_BACKOFF_ITER   (3759U)    // approx. 0.1ms
@@ -62,7 +62,7 @@ typedef enum
 
 // halt the kernel at designated time
 #define PDOS_USE_STOP_TIME          (1)
-#define PDOS_STOP_TIME              (3000U)
+#define PDOS_STOP_TIME              (1000U)
 
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);

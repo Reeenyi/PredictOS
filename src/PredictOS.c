@@ -90,13 +90,13 @@ typedef struct _PdOSTaskControlBlock
 typedef PdOSTaskControlBlock *PdOSTaskHandle;
 
 // arbiter data structure
-typedef struct
+typedef struct _PdOSArbiterType
 {
     volatile uint8_t req[2U];    // request of two cores
     volatile uint8_t prio[2U];   // priorities
-} ArbiterType;
+} PdOSArbiterType;
 
-#define ARBITER ((volatile ArbiterType *)PDOS_ARB_SHM_BASE)
+#define ARBITER ((volatile PdOSArbiterType *)PDOS_ARB_SHM_BASE)
 
 extern uint32_t SystemCoreClock;
 
