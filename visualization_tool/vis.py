@@ -69,19 +69,18 @@ timeMax = max(e for p in priorityList for s, e, ph in segments[p])
 
 fig, ax = plt.subplots()
 
-# draw release time
-for priority in priorityList:
-    yPos = priorityToY[priority]
-    for releaseTs in sorted(releaseTimes[priority]):
-        if timeMin <= releaseTs <= timeMax:
-            ax.plot(releaseTs, yPos + 0.42, marker="v", color="0.35", markersize=5, linestyle="None")
-            ax.plot([releaseTs, releaseTs], [yPos - 0.35, yPos + 0.35], color="0.35", linestyle="--", linewidth=0.8)
-
 # draw segments
 for priority in priorityList:
     yPos = priorityToY[priority]
     for startTs, endTs, phase in segments[priority]:
         ax.add_patch(Rectangle((startTs, yPos - 0.35), endTs - startTs, 0.7, color=phaseColors[phase], lw=0))
+
+# draw release time after the segments so arrows are not covered by rectangles.
+for priority in priorityList:
+    yPos = priorityToY[priority]
+    for releaseTs in sorted(releaseTimes[priority]):
+        if timeMin <= releaseTs <= timeMax:
+            ax.annotate('', xy=(releaseTs, yPos + 0.5), xytext=(releaseTs, yPos + 0.3), arrowprops=dict(arrowstyle='-|>', color='0.35', lw=1.5, mutation_scale=10), zorder=3, annotation_clip=False)
 
 for phaseIndex, phaseName in enumerate(["read", "execute", "write"]):
     ax.plot([], [], color=phaseColors[phaseIndex], label=phaseName)
@@ -91,6 +90,7 @@ ax.set_yticklabels(priorityList)
 ax.set_xlabel("system time")
 ax.set_ylabel("priority")
 ax.set_xlim(timeMin, timeMax)
+ax.set_ylim(-0.6, len(priorityList) - 0.3)
 ax.legend()
 
 plt.tight_layout()
