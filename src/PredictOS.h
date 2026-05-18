@@ -62,7 +62,10 @@ typedef enum
 
 // halt the kernel at designated time
 #define PDOS_USE_STOP_TIME          (1)
-#define PDOS_STOP_TIME              (1000U)
+#define PDOS_STOP_TIME              (3000U)
+
+// enable evaluations
+#define PDOS_USE_EVAL               (1)
 
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);

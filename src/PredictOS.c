@@ -28,6 +28,21 @@
 #define HSEM_COREID_CORE2   (0x1U << 8U)
 #define HSEM_LOCK_BIT       (1U << 31U)
 
+#if PDOS_USE_EVAL == 1
+// performance evaluation related registers
+#define DEMCR_ADDR          (0xE000EDFCU)
+#define DEMCR_REG           (*((volatile uint32_t *)DEMCR_ADDR))
+#define DEMCR_TRCENA_BIT    (1U << 24U)
+#define DWT_CTRL_ADDR       (0xE0001000U)
+#define DWT_CTRL_REG        (*((volatile uint32_t *)DWT_CTRL_ADDR))
+#define DWT_CTRL_CYCCNTENA_BIT  (1U << 0U)
+#define DWT_CYCCNT_ADDR     (0xE0001004U)
+#define DWT_CYCCNT_REG      (*((volatile uint32_t *)DWT_CYCCNT_ADDR))
+#define DWT_LAR_ADDR        (0xE0001FB0U)
+#define DWT_LAR_REG         (*((volatile uint32_t *)DWT_LAR_ADDR))
+#define DWT_LAR_UNLOCK_KEY  (0xC5ACCE55U)
+#endif
+
 #define GET_MAX_PRIO(x)     (32U - __builtin_clz(x))
 
 #define likely(x)           __builtin_expect(!!(x), 1)
@@ -121,6 +136,11 @@ PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2U] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
 PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_MAIN_MEM_BASE + MEM_POOL_SIZE);  // log buffer in main memory
 
+PDOS_DTCM static volatile uint32_t schedEnterTime = 0U;
+PDOS_DTCM static volatile uint32_t totalSwtTime = 0U;
+PDOS_DTCM static volatile uint32_t totalSwtCnt = 0U;
+PDOS_DTCM static volatile uint32_t schedEvalEnable = 0U;
+
 // Set priority of PendSV interrupt.
 static inline void PdOS_set_pendsv_prio(uint8_t prio)
 {
@@ -139,6 +159,17 @@ static inline void PdOS_trigger_pendsv(void)
 {
     ICSR_REG = PENDSVSET_BIT;
 }
+
+#if PDOS_USE_EVAL == 1
+// Enable CYCCNT
+static inline void PdOS_enable_cyccnt(void)
+{
+    DEMCR_REG     |= DEMCR_TRCENA_BIT;
+    DWT_LAR_REG    = DWT_LAR_UNLOCK_KEY;
+    DWT_CYCCNT_REG = 0U;
+    DWT_CTRL_REG  |= DWT_CTRL_CYCCNTENA_BIT;
+}
+#endif
 
 // Add an entry to log.
 static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
@@ -308,6 +339,10 @@ static void PdOS_sched(void)
 {
     PdOSTaskHandle pendingTask;
 
+#if PDOS_USE_EVAL == 1
+    schedEnterTime = DWT_CYCCNT_REG;
+#endif
+
     // on init
     if (unlikely(currTask == NULL))
     {
@@ -341,6 +376,9 @@ static void PdOS_sched(void)
             // return and pendSV will not be triggered
             return;
         }
+// #if PDOS_USE_EVAL == 1
+//         schedEvalEnable = 1U;
+// #endif
     }
     // CPU yield path
     else
@@ -352,6 +390,9 @@ static void PdOS_sched(void)
         {
             nextTask = pendingTask;
         }
+#if PDOS_USE_EVAL == 1
+        schedEvalEnable = 1U;
+#endif
         // nextTask != currTask in all cases of CPU yield. so no need to add if statement afterward
     }
 
@@ -400,6 +441,11 @@ PdOSErrCode PdOS_init(void)
 {
     // set PendSV priority to 0xFF
     PdOS_set_pendsv_prio(0xFFU);
+
+#if PDOS_USE_EVAL == 1
+    // enable CYCCNT
+    PdOS_enable_cyccnt();
+#endif
 
     // create idle task
     return PdOS_create_task(&PdOS_idle_task_func, 0U, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
@@ -584,6 +630,11 @@ static void PdOS_tick(void)
     if (unlikely(systime >= PDOS_STOP_TIME))
     {
         // stop maintaining systime and halt the kernel
+        if (CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk)
+        {
+            // set a breakpoint if debugger is connected
+            __asm volatile("BKPT #0");
+        }
         return;
     }
 #endif
@@ -714,32 +765,62 @@ void PdOS_write(uint32_t extraDelayTime)
 __attribute__((naked)) void PendSV_Handler(void)
 {
     __asm volatile (
-        "  CPSID         I                   \n"  // disable interrupts
+        "   CPSID   I                       \n"  // disable interrupts
 
-        "  LDR           r2, =currTask       \n"
-        "  LDR           r1, [r2, #0]        \n"  // r1 = currTask
-        "  CBZ           r1, PendSV_restore  \n"  // if null, skip save
+        "   LDR     R2, =currTask           \n"
+        "   LDR     R1, [R2, #0]            \n"  // R1 = currTask
+        "   CBZ     R1, PendSV_restore      \n"  // if null, skip save
 
         // save context
-        "  MRS           r0, psp             \n"  // read PSP
-        "  STMDB         r0!, {r4-r11}       \n"  // store R4~R11 according to PSP
+        "   MRS     R0, PSP                 \n"  // read PSP
+        "   STMDB   R0!, {R4-R11}           \n"  // store R4~R11 according to PSP
 
-        "  STR           r0, [r1, #0]        \n"  // currTask->psp = PSP now
+        "   STR     R0, [R1, #0]            \n"  // currTask->psp = PSP now
 
-        "PendSV_restore:                     \n"
+        "PendSV_restore:                    \n"
         // restore context
-        "  LDR           r2, =nextTask       \n"
-        "  LDR           r1, [r2, #0]        \n"  // r1 = nextTask
-        "  LDR           r0, [r1, #0]        \n"  // r0 = nextTask->psp
+        "   LDR     R2, =nextTask           \n"
+        "   LDR     R1, [R2, #0]            \n"  // R1 = nextTask
+        "   LDR     R0, [R1, #0]            \n"  // R0 = nextTask->psp
 
-        "  LDMIA         r0!, {r4-r11}       \n"  // restore R4~R11 according to PSP
-        "  MSR           psp, r0             \n"  // update PSP
+        "   LDMIA   R0!, {R4-R11}           \n"  // restore R4~R11 according to PSP
+        "   MSR     PSP, R0                 \n"  // update PSP
 
         // currTask = nextTask
-        "  LDR           r2, =currTask       \n"
-        "  STR           r1, [r2, #0]        \n"
+        "   LDR     R2, =currTask           \n"
+        "   STR     R1, [R2, #0]            \n"
 
-        "  CPSIE         I                   \n"  // enable interrupts
-        "  BX            lr                  \n"
+#if PDOS_USE_EVAL == 1
+        // if schedEvalEnable not set, skip evaluation
+        "   LDR     R0, =schedEvalEnable    \n"
+        "   LDR     R3, [R0, #0]            \n"  // R3 = schedEvalEnable
+        "   CBZ     R3, PendSV_skip_eval    \n"
+        "   MOV     R3, #0                  \n"
+        "   STR     R3, [R0, #0]            \n"  // schedEvalEnable = 0
+
+        // R2 = CYCCNT - schedEnterTime
+        "   LDR     R3, =0xE0001004         \n"
+        "   LDR     R2, [R3, #0]            \n"  // R2 = DWT_CYCCNT
+        "   LDR     R0, =schedEnterTime     \n"
+        "   LDR     R3, [R0, #0]            \n"  // R3 = schedEnterTime
+        "   SUB     R2, R2, R3              \n"
+
+        // totalSwtTime += R2
+        "   LDR     R0, =totalSwtTime       \n"
+        "   LDR     R3, [R0, #0]            \n"  // R3 = totalSwtTime
+        "   ADD     R3, R3, R2              \n"
+        "   STR     R3, [R0, #0]            \n"
+
+        // totalSwtCnt += 1
+        "   LDR     R0, =totalSwtCnt        \n"
+        "   LDR     R3, [R0, #0]            \n"  // R3 = totalSwtCnt
+        "   ADD     R3, R3, #1              \n"
+        "   STR     R3, [R0, #0]            \n"
+
+        "PendSV_skip_eval:                  \n"
+#endif
+
+        "   CPSIE   I                       \n"  // enable interrupts
+        "   BX      LR                      \n"
     );
 }
