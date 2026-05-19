@@ -28,7 +28,7 @@
 #define HSEM_COREID_CORE2   (0x1U << 8U)
 #define HSEM_LOCK_BIT       (1U << 31U)
 
-#if PDOS_USE_EVAL == 1
+#if PDOS_ENABLE_EVAL == 1
 // performance evaluation related registers
 #define DEMCR_ADDR          (0xE000EDFCU)
 #define DEMCR_REG           (*((volatile uint32_t *)DEMCR_ADDR))
@@ -48,7 +48,7 @@
 #define likely(x)           __builtin_expect(!!(x), 1)
 #define unlikely(x)         __builtin_expect(!!(x), 0)
 
-#if MAX_TASK_NUM > 32U
+#if PDOS_MAX_TASK_NUM > 32U
 #error "maximum task number should not exceed 32"
 #endif
 
@@ -64,7 +64,7 @@
 #define PDOS_MAIN_MEM_SIZE PDOS_CORE2_MAIN_MEM_SIZE
 #endif
 
-#if MEM_POOL_SIZE + MAX_LOG_NUM * 2U > PDOS_MAIN_MEM_SIZE
+#if PDOS_MEM_POOL_SIZE + PDOS_MAX_SCHED_LOG_NUM * 2U > PDOS_MAIN_MEM_SIZE
 #error "memory requirement too high"
 #endif
 
@@ -116,8 +116,8 @@ typedef struct _PdOSArbiterType
 extern uint32_t SystemCoreClock;
 
 // all variables should be placed in core-local memory
-PDOS_DTCM static PdOSTaskControlBlock tcbPool[MAX_TASK_NUM + 1U] = {};
-PDOS_DTCM static PdOSTaskHandle tasks[MAX_TASK_NUM + 1U] = {};
+PDOS_DTCM static PdOSTaskControlBlock tcbPool[PDOS_MAX_TASK_NUM + 1U] = {};
+PDOS_DTCM static PdOSTaskHandle tasks[PDOS_MAX_TASK_NUM + 1U] = {};
 PDOS_DTCM static volatile PdOSTaskHandle currTask = NULL;
 PDOS_DTCM static volatile PdOSTaskHandle nextTask = NULL;
 PDOS_DTCM static uint32_t readySet = 0U;
@@ -126,19 +126,19 @@ PDOS_DTCM static uint32_t idleTaskStack[32U];
 PDOS_DTCM static volatile uint32_t systime = 0U;
 
 // memory in local and main memory
-PDOS_DTCM static uint8_t localMem[MAX_LOCAL_MEM_SIZE];  // local memory for task execution
+PDOS_DTCM static uint8_t localMem[PDOS_LOCAL_MEM_SIZE];  // local memory for task execution
 PDOS_DTCM static uint32_t localMemFreeIndex = 0U;
 PDOS_DTCM static uint8_t *memPool = (uint8_t *)PDOS_MAIN_MEM_BASE;  // memory pool in main memory (monotonically allocated)
 PDOS_DTCM static uint32_t mainMemFreeIndex = 0U;
 
 // circular buffer for log storage
-PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2U] = {};
+PDOS_DTCM static uint32_t localLogBuffer[PDOS_MAX_SCHED_LOG_NUM * 2U] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
-PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_MAIN_MEM_BASE + MEM_POOL_SIZE);  // log buffer in main memory
+PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_MAIN_MEM_BASE + PDOS_MEM_POOL_SIZE);  // log buffer in main memory
 
-#if PDOS_USE_EVAL == 1
+#if PDOS_ENABLE_EVAL == 1
 // evaluation variables
-PDOS_DTCM static uint32_t swtTimeLog[MAX_EVAL_LOG_NUM] = {};  // use a debugger to read its contents
+PDOS_DTCM static uint32_t swtTimeLog[PDOS_MAX_EVAL_LOG_NUM] = {};  // use a debugger to read its contents
 PDOS_DTCM static volatile uint32_t schedEnterTime = 0U;
 PDOS_DTCM static volatile uint32_t schedEvalEnable = 0U;
 PDOS_DTCM static volatile uint32_t swtTime = 0U;
@@ -165,7 +165,7 @@ static inline void PdOS_trigger_pendsv(void)
     ICSR_REG = PENDSVSET_BIT;
 }
 
-#if PDOS_USE_EVAL == 1
+#if PDOS_ENABLE_EVAL == 1
 // Enable CYCCNT
 static inline void PdOS_enable_cyccnt(void)
 {
@@ -179,6 +179,7 @@ static inline void PdOS_enable_cyccnt(void)
 // Add an entry to log.
 static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
 {
+#if PDOS_ENABLE_SCHED_LOG == 1
     /* 
       log format:
         systime(32 bits) - currIterTime(16 bits) - priority(8 bits) - event(8 bits)
@@ -200,7 +201,14 @@ static void PdOS_add_log(uint8_t prio, PdOSLogEventType logEvent)
     currIterTime = systime - tasks[prio]->wkUpTime;
     localLogBuffer[logIndex * 2U + 1U] |= (currIterTime << 16U);
     
-    logIndex = (logIndex + 1U < MAX_LOG_NUM) ? (logIndex + 1U) : 0U;
+    logIndex = (logIndex + 1U < PDOS_MAX_SCHED_LOG_NUM) ? (logIndex + 1U) : 0U;
+
+#else
+    (void)prio;
+    (void)logEvent;
+    (void)logIndex;
+
+#endif
 }
 
 // Create a new task.
@@ -215,8 +223,8 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
         return PDOS_INVALID_PARAM;
     }
 
-    // requires a unique priority no greater than MAX_TASK_NUM
-    if (unlikely((prio > MAX_TASK_NUM) || (tasks[prio] != NULL)))
+    // requires a unique priority no greater than PDOS_MAX_TASK_NUM
+    if (unlikely((prio > PDOS_MAX_TASK_NUM) || (tasks[prio] != NULL)))
     {
         return PDOS_INVALID_PARAM;
     }
@@ -228,7 +236,7 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
     }
 
     // ensure enough memory space
-    if (unlikely((memSize > MAX_LOCAL_MEM_SIZE) || (mainMemFreeIndex + memSize > MEM_POOL_SIZE)))
+    if (unlikely((memSize > PDOS_LOCAL_MEM_SIZE) || (mainMemFreeIndex + memSize > PDOS_MEM_POOL_SIZE)))
     {
         return PDOS_ERROR;
     }
@@ -283,6 +291,8 @@ PdOSErrCode PdOS_create_task(PdOSTaskFunction taskFunction, uint8_t prio, uint8_
 // Find available task with the highest nominal priority.
 static PdOSTaskHandle PdOS_find_hi_prio_avail_task(void)
 {
+#if PDOS_ENABLE_PREEMPTION == 1
+    // preemptive mode
     uint32_t tmpReadySet = readySet;
     uint32_t maxPrio;
     PdOSTaskHandle t;
@@ -299,7 +309,7 @@ static PdOSTaskHandle PdOS_find_hi_prio_avail_task(void)
         }
 
         // a task is allowed to run only when there is enough space in core-local memory
-        if (localMemFreeIndex + t->memSize <= MAX_LOCAL_MEM_SIZE)
+        if (localMemFreeIndex + t->memSize <= PDOS_LOCAL_MEM_SIZE)
         {
             return t;
         }
@@ -309,8 +319,15 @@ static PdOSTaskHandle PdOS_find_hi_prio_avail_task(void)
 
     // return idle task when no task is available
     return tasks[0U];
+
+#else
+    // fully non-preemptive mode
+    return tasks[GET_MAX_PRIO(readySet)];
+
+#endif
 }
 
+#if PDOS_ENABLE_PREEMPTION == 1
 // Find pending task with the highest threshold.
 // No need to check memory availability here, as pending tasks are already in core-local memory.
 static PdOSTaskHandle PdOS_find_hi_thres_pending_task(void)
@@ -337,6 +354,7 @@ static PdOSTaskHandle PdOS_find_hi_thres_pending_task(void)
 
     return tasks[maxIndex];
 }
+#endif
 
 // Schedule the next task to run.
 // Needs to be called in a critical section.
@@ -344,8 +362,8 @@ static void PdOS_sched(void)
 {
     PdOSTaskHandle pendingTask;
 
-#if PDOS_USE_EVAL == 1
-    if ((prevSwtCnt != swtCnt) && (prevSwtCnt < MAX_EVAL_LOG_NUM))
+#if PDOS_ENABLE_EVAL == 1
+    if ((prevSwtCnt != swtCnt) && (prevSwtCnt < PDOS_MAX_EVAL_LOG_NUM))
     {
         swtTimeLog[prevSwtCnt] = swtTime;
         prevSwtCnt = swtCnt;
@@ -362,11 +380,13 @@ static void PdOS_sched(void)
         return;
     }
 
+#if PDOS_ENABLE_PREEMPTION == 1
     // memory phases cannot be preempted
     if ((currTask->phase == (uint8_t)PDOS_READ_PHASE) || (currTask->phase == (uint8_t)PDOS_WRITE_PHASE))
     {
         return;
     }
+#endif
 
     // assume nextTask is the task with highest nominal priority and adjust later
     nextTask = PdOS_find_hi_prio_avail_task();
@@ -377,6 +397,8 @@ static void PdOS_sched(void)
 
     // nextTask != currTask, i.e., nextTask wants to switch context
 
+// following logic only needed in preemptive mode
+#if PDOS_ENABLE_PREEMPTION == 1
     // preemption path
     if (currTask->phase == (uint8_t)PDOS_EXECUTE_PHASE)
     {
@@ -387,9 +409,11 @@ static void PdOS_sched(void)
             // return and pendSV will not be triggered
             return;
         }
-// #if PDOS_USE_EVAL == 1
-//         schedEvalEnable = 1U;
-// #endif
+
+/* uncomment this if you want to evaluate the preemption path */
+#if PDOS_ENABLE_EVAL == 1
+        schedEvalEnable = 1U;
+#endif
     }
     // CPU yield path
     else
@@ -401,12 +425,26 @@ static void PdOS_sched(void)
         {
             nextTask = pendingTask;
         }
-#if PDOS_USE_EVAL == 1
-        schedEvalEnable = 1U;
-#endif
+    
+// /* uncomment this if you want to evaluate the CPU yield path */
+// #if PDOS_ENABLE_EVAL == 1
+//         schedEvalEnable = 1U;
+// #endif
+
         // nextTask != currTask in all cases of CPU yield. so no need to add if statement afterward
     }
 
+#else
+// fully non-preemptive
+    (void)pendingTask;
+
+#if PDOS_ENABLE_EVAL == 1
+    schedEvalEnable = 1U;
+#endif
+
+#endif
+
+#if PDOS_ENABLE_SCHED_LOG == 1
     // record log of preemption / resume
     if ((nextTask != tasks[0U]) && (currTask != tasks[0U]))
     {
@@ -426,6 +464,7 @@ static void PdOS_sched(void)
             }
         }
     }
+#endif
 
     // trigger the PendSV interrupt
     PdOS_trigger_pendsv();
@@ -453,7 +492,7 @@ PdOSErrCode PdOS_init(void)
     // set PendSV priority to 0xFF
     PdOS_set_pendsv_prio(0xFFU);
 
-#if PDOS_USE_EVAL == 1
+#if PDOS_ENABLE_EVAL == 1
     // enable CYCCNT
     PdOS_enable_cyccnt();
 #endif
@@ -484,10 +523,10 @@ static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 // Busy wait for a relative time (keep CPU).
 void PdOS_busy_wait(uint32_t ticks)
 {
-#if USE_BUSY_WAIT_DUMMY == 1
+#if PDOS_USE_BUSY_WAIT_DUMMY == 1
     // busy wait by executing dummy cycles
     uint32_t i;
-    for (i = 0U; i < ticks * DUMMY_CYC_PER_MS; i++)
+    for (i = 0U; i < ticks * PDOS_DUMMY_CYC_PER_MS; i++)
     {
         /* busy wait */
     }
@@ -674,7 +713,7 @@ static void PdOS_systick_callback(systick_driver_t *sdp)
     PdOS_tick();
 
 // call scheduler at every systick only when preemptions are allowed
-#if ALLOW_PREEMPTION == 1
+#if PDOS_ENABLE_PREEMPTION == 1
     __disable_irq();
     PdOS_sched();
     __enable_irq();
@@ -687,7 +726,7 @@ static void PdOS_set_systick(void)
 {
     systick_init(&DRV_SYSTICK);
     systick_set_prio(&DRV_SYSTICK, 0U);  // set systick to the highest priority
-    systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / TICKS_PER_SECOND));
+    systick_set_relval(&DRV_SYSTICK, (SystemCoreClock / PDOS_TICKS_PER_SECOND));
     systick_set_cb(&DRV_SYSTICK, PdOS_systick_callback);
 
     // use HSEM to synchronize systick on two cores
@@ -801,7 +840,7 @@ __attribute__((naked)) void PendSV_Handler(void)
         "   LDR     R2, =currTask           \n"
         "   STR     R1, [R2, #0]            \n"
 
-#if PDOS_USE_EVAL == 1
+#if PDOS_ENABLE_EVAL == 1
         // if schedEvalEnable not set, skip evaluation
         "   LDR     R0, =schedEvalEnable    \n"
         "   LDR     R3, [R0, #0]            \n"  // R3 = schedEvalEnable

@@ -30,29 +30,29 @@ typedef enum
 } PdOSErrCode;
 
 // maximum task number. should not exceed 32
-#define MAX_TASK_NUM                (32U)
+#define PDOS_MAX_TASK_NUM           (32U)
 
 // systick frequency
-#define TICKS_PER_SECOND            (1000U)
+#define PDOS_TICKS_PER_SECOND       (1000U)
 
 // memory pool size (in bytes)
-#define MEM_POOL_SIZE               (4096U)
+#define PDOS_MEM_POOL_SIZE          (4096U)
 
 // maximum size of core-local memory buffer (in bytes)
-#define MAX_LOCAL_MEM_SIZE          (1000U)
+#define PDOS_LOCAL_MEM_SIZE         (1000U)
 
-// maximum number of log entries
-// note: each entry requires 8 bytes
-#define MAX_LOG_NUM                 (256U)
+#define PDOS_ENABLE_SCHED_LOG       (1)
+// maximum number of log entries. note: each entry requires 8 bytes
+#define PDOS_MAX_SCHED_LOG_NUM      (256U)
 
 // 1: limited preemptive / 0: fully non-preemptive
-#define ALLOW_PREEMPTION            (1)
+#define PDOS_ENABLE_PREEMPTION      (1)
 
 // in busy wait, 1: use dummy cycles / 0: wait systick
-#define USE_BUSY_WAIT_DUMMY         (1)
+#define PDOS_USE_BUSY_WAIT_DUMMY    (1)
 
-// dummy cycles per millisecond. use with USE_BUSY_WAIT_DUMMY=1
-#define DUMMY_CYC_PER_MS            (33500U)
+// dummy cycles per millisecond. use with PDOS_USE_BUSY_WAIT_DUMMY=1
+#define PDOS_DUMMY_CYC_PER_MS       (33500U)
 
 // number of dummy cycles before retry when arbitration lose
 #define PDOS_ARBITER_BACKOFF_ITER   (3759U)    // approx. 0.1ms
@@ -65,8 +65,9 @@ typedef enum
 #define PDOS_STOP_TIME              (3000U)
 
 // enable evaluations
-#define PDOS_USE_EVAL               (1)
-#define MAX_EVAL_LOG_NUM            (200U)
+#define PDOS_ENABLE_EVAL            (1)
+// maximun number of switch time record
+#define PDOS_MAX_EVAL_LOG_NUM       (200U)
 
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);
