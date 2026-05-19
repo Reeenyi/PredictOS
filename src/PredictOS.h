@@ -66,6 +66,7 @@ typedef enum
 
 // enable evaluations
 #define PDOS_USE_EVAL               (1)
+#define MAX_EVAL_LOG_NUM            (200U)
 
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);

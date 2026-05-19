@@ -67,6 +67,9 @@ phaseColors  = ["C0", "C1", "C2"]  # read / execute / write
 timeMin = min(s for p in priorityList for s, e, ph in segments[p])
 timeMax = max(e for p in priorityList for s, e, ph in segments[p])
 
+# timeMin = 2550
+# timeMax = 2850
+
 fig, ax = plt.subplots()
 
 # draw segments
