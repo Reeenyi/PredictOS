@@ -136,10 +136,13 @@ PDOS_DTCM static uint32_t localLogBuffer[MAX_LOG_NUM * 2U] = {};
 PDOS_DTCM static uint32_t logIndex = 0U;
 PDOS_DTCM static uint32_t *logBuffer = (uint32_t *)(PDOS_MAIN_MEM_BASE + MEM_POOL_SIZE);  // log buffer in main memory
 
+// evaluation variables
 PDOS_DTCM static volatile uint32_t schedEnterTime = 0U;
+PDOS_DTCM static volatile uint32_t schedEvalEnable = 0U;
 PDOS_DTCM static volatile uint32_t totalSwtTime = 0U;
 PDOS_DTCM static volatile uint32_t totalSwtCnt = 0U;
-PDOS_DTCM static volatile uint32_t schedEvalEnable = 0U;
+PDOS_DTCM static volatile uint32_t maxSwtTime = 0U;
+PDOS_DTCM static volatile uint32_t minSwtTime = 0xFFFFFFFFU;
 
 // Set priority of PendSV interrupt.
 static inline void PdOS_set_pendsv_prio(uint8_t prio)
@@ -816,6 +819,22 @@ __attribute__((naked)) void PendSV_Handler(void)
         "   LDR     R3, [R0, #0]            \n"  // R3 = totalSwtCnt
         "   ADD     R3, R3, #1              \n"
         "   STR     R3, [R0, #0]            \n"
+
+        // update maxSwtTime
+        "   LDR     R0, =maxSwtTime         \n"
+        "   LDR     R3, [R0, #0]            \n"  // R3 = maxSwtTime
+        "   CMP     R2, R3                  \n"
+        "   BLS     PendSV_skip_update_max  \n"  // if R2 <= maxSwtTime, skip
+        "   STR     R2, [R0, #0]            \n"  // maxSwtTime = R2
+        "PendSV_skip_update_max:            \n"
+
+        // update minSwtTime
+        "   LDR     R0, =minSwtTime         \n"
+        "   LDR     R3, [R0, #0]            \n"  // R3 = minSwtTime
+        "   CMP     R2, R3                  \n"
+        "   BHS     PendSV_skip_update_min  \n"  // if R2 >= minSwtTime, skip
+        "   STR     R2, [R0, #0]            \n"  // minSwtTime = R2
+        "PendSV_skip_update_min:            \n"
 
         "PendSV_skip_eval:                  \n"
 #endif
