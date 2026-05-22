@@ -789,12 +789,13 @@ void *PdOS_read(uint32_t extraDelayTime)
 void PdOS_write(uint32_t extraDelayTime)
 {
     uint8_t *currLocalMem;
+    
+    PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
 
     // acquire access to shared memory
     PdOS_arbiter_acquire(currTask->prio);
     
     currTask->phase = (uint8_t)PDOS_WRITE_PHASE;
-    PdOS_add_log(currTask->prio, PDOS_EXIT_EXECUTE);
     PdOS_add_log(currTask->prio, PDOS_ENTER_WRITE);
 
     localMemFreeIndex -= currTask->memSize;
