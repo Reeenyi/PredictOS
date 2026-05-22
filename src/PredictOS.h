@@ -48,24 +48,21 @@ typedef enum
 // 1: limited preemptive / 0: fully non-preemptive
 #define PDOS_ENABLE_PREEMPTION      (1)
 
-// in busy wait, 1: use dummy cycles / 0: wait systick
-#define PDOS_USE_BUSY_WAIT_DUMMY    (1)
-
-// dummy cycles per millisecond. use with PDOS_USE_BUSY_WAIT_DUMMY=1
+// dummy cycles per millisecond
 #define PDOS_DUMMY_CYC_PER_MS       (33500U)
 
 // number of dummy cycles before retry when arbitration lose
-#define PDOS_ARBITER_BACKOFF_ITER   (3759U)    // approx. 0.1ms
+#define PDOS_ARBITER_BACKOFF_ITER   (3350U)    // approx. 0.1ms
 
 // number of dummy cycles for waiting another core to register
 #define PDOS_ARBITER_WAIT_WINDOW    (376U)
 
 // halt the kernel at designated time
 #define PDOS_USE_STOP_TIME          (1)
-#define PDOS_STOP_TIME              (3000U)
+#define PDOS_STOP_TIME              (2000U)
 
 // enable evaluations
-#define PDOS_ENABLE_EVAL            (1)
+#define PDOS_ENABLE_EVAL            (0)
 // maximun number of switch time record
 #define PDOS_MAX_EVAL_LOG_NUM       (200U)
 

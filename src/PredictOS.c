@@ -523,23 +523,12 @@ static inline void PdOS_block_curr_task(uint32_t nextWkUpTime)
 // Busy wait for a relative time (keep CPU).
 void PdOS_busy_wait(uint32_t ticks)
 {
-#if PDOS_USE_BUSY_WAIT_DUMMY == 1
     // busy wait by executing dummy cycles
     uint32_t i;
     for (i = 0U; i < ticks * PDOS_DUMMY_CYC_PER_MS; i++)
     {
         /* busy wait */
     }
-
-#else
-    // busy wait by waiting systick
-    uint32_t releaseTime = systime + ticks;
-    while ((int32_t)(releaseTime - systime) >= 0)
-    {
-        /* busy wait */
-    }
-
-#endif
 }
 
 // Delay for a relative time (yield CPU).
