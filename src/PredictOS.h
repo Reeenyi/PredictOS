@@ -69,6 +69,11 @@ typedef enum
 // maximun number of switch time record
 #define PDOS_MAX_EVAL_LOG_NUM       (200U)
 
+// generate a GPIO pulse at every systick
+#define PDOS_ENBALE_GPIO_PULSE      (0)
+// pulse width in dummy cycles
+#define PDOS_PULSE_WIDTH            (10U)
+
 // task function. should take no arguments and return void
 typedef void (*PdOSTaskFunction)(void);
 

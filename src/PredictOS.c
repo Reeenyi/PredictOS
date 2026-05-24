@@ -59,9 +59,11 @@
 #if PDOS_CURR_CORE_ID == 1
 #define PDOS_MAIN_MEM_BASE PDOS_CORE1_MAIN_MEM_BASE
 #define PDOS_MAIN_MEM_SIZE PDOS_CORE1_MAIN_MEM_SIZE
+#define PDOS_GPIO_PIN USER_LED_A
 #else
 #define PDOS_MAIN_MEM_BASE PDOS_CORE2_MAIN_MEM_BASE
 #define PDOS_MAIN_MEM_SIZE PDOS_CORE2_MAIN_MEM_SIZE
+#define PDOS_GPIO_PIN USER_LED_B
 #endif
 
 #if PDOS_MEM_POOL_SIZE + PDOS_MAX_SCHED_LOG_NUM * 2U > PDOS_MAIN_MEM_SIZE
@@ -495,6 +497,10 @@ PdOSErrCode PdOS_init(void)
     PdOS_enable_cyccnt();
 #endif
 
+#if PDOS_ENBALE_GPIO_PULSE == 1
+    USER_LED_SWITCH_OFF(PDOS_GPIO_PIN);
+#endif
+
     // create idle task
     return PdOS_create_task(&PdOS_idle_task_func, 0U, 0U, idleTaskStack, sizeof(idleTaskStack), 0U);
 }
@@ -697,6 +703,15 @@ static void PdOS_tick(void)
 static void PdOS_systick_callback(systick_driver_t *sdp)
 {
     (void)sdp;
+
+#if PDOS_ENBALE_GPIO_PULSE == 1
+    // generate a GPIO pulse
+    uint32_t i;
+    gpio_set_pin(PDOS_GPIO_PIN);
+    for (i = 0; i < PDOS_PULSE_WIDTH; i++);
+    gpio_clear_pin(PDOS_GPIO_PIN);
+#endif
+
     PdOS_tick();
 
 // call scheduler at every systick only when preemptions are allowed
