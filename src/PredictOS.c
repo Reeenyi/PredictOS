@@ -410,8 +410,7 @@ static void PdOS_sched(void)
             return;
         }
 
-/* uncomment this if you want to evaluate the preemption path */
-#if PDOS_ENABLE_EVAL == 1
+#if (PDOS_ENABLE_EVAL == 1) && (PDOS_EVAL_PREEMPT == 1)
         schedEvalEnable = 1U;
 #endif
     }
@@ -426,10 +425,9 @@ static void PdOS_sched(void)
             nextTask = pendingTask;
         }
     
-// /* uncomment this if you want to evaluate the CPU yield path */
-// #if PDOS_ENABLE_EVAL == 1
-//         schedEvalEnable = 1U;
-// #endif
+#if (PDOS_ENABLE_EVAL == 1) && (PDOS_EVAL_YIELD == 1)
+        schedEvalEnable = 1U;
+#endif
 
         // nextTask != currTask in all cases of CPU yield. so no need to add if statement afterward
     }
@@ -438,7 +436,7 @@ static void PdOS_sched(void)
 // fully non-preemptive
     (void)pendingTask;
 
-#if PDOS_ENABLE_EVAL == 1
+#if (PDOS_ENABLE_EVAL == 1) && (PDOS_EVAL_NONPREEMPT == 1)
     schedEvalEnable = 1U;
 #endif
 

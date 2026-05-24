@@ -63,6 +63,9 @@ typedef enum
 
 // enable evaluations
 #define PDOS_ENABLE_EVAL            (0)
+#define PDOS_EVAL_PREEMPT           (1)  // preemption path
+#define PDOS_EVAL_YIELD             (0)  // CPU yield path
+#define PDOS_EVAL_NONPREEMPT        (1)  // fully non-preemptive mode
 // maximun number of switch time record
 #define PDOS_MAX_EVAL_LOG_NUM       (200U)
 
