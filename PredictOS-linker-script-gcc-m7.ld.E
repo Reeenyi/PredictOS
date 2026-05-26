@@ -83,7 +83,6 @@ SECTIONS
     } > EMBED_NVM
 
 
-    /* section .itcm needs to start at offset 0 for alignment of the vector table */
     .itcm ORIGIN(EMBED_ITCM) : ALIGN(16)
     {
         __itcm__ = . ;

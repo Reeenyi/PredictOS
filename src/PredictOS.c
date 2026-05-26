@@ -343,9 +343,7 @@ static PdOSTaskHandle PdOS_find_hi_thres_pending_task(void)
     {
         currIndex = GET_MAX_PRIO(tmpReadySet);
         t = tasks[currIndex];
-
-        // when thresholds are equal, comparasion is based on prio
-        // (use > not >= so that lo-prio task will not be maxIndex)
+        
         if ((t->phase == (uint8_t)PDOS_EXECUTE_PHASE) && (t->threshold > tasks[maxIndex]->threshold))
         {
             maxIndex = currIndex;
@@ -858,7 +856,7 @@ __attribute__((naked)) void PendSV_Handler(void)
         "   LDR     R3, [R0, #0]            \n"  // R3 = schedEnterTime
         "   SUB     R2, R2, R3              \n"  // R2 -= schedEnterTime
 
-        // swtTime += R2
+        // swtTime = R2
         "   LDR     R0, =swtTime            \n"
         "   STR     R2, [R0, #0]            \n"  // swtTime = R2
 

@@ -45,7 +45,7 @@ typedef enum
 // maximum number of log entries. note: each entry requires 8 bytes
 #define PDOS_MAX_SCHED_LOG_NUM      (256U)
 
-// 1: limited preemptive / 0: fully non-preemptive
+// 1: limited-preemptive / 0: fully non-preemptive
 #define PDOS_ENABLE_PREEMPTION      (1)
 
 // dummy cycles per millisecond

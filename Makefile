@@ -3,7 +3,7 @@
 ################################################################################
 
 # 'Stellar SDK' project values
-PROJECTNAME := Simple_RTOS
+PROJECTNAME := PredictOS
 SDKID := StellarESDK-1.7.0
 
 # Please Update it if you move your workspace

@@ -9,9 +9,8 @@
 
 #define TASK_LIST                                                                                             \
     /*ID, MAGIC, STK_SIZE, MEM_USAGE, PRIORITY, THERSHOLD, OFFSET, READ_TIME, EXEC_TIME, WRITE_TIME, PERIOD*/ \
-    X(1 , 66U  , 512U    , 100U     , 3U      , 3U       , 50U   , 10U       , 20U      , 10U      , 160U   ) \
-    X(2 , 77U  , 512U    , 100U     , 2U      , 3U       , 20U   , 10U       , 10U      , 10U      , 240U   ) \
-    X(3 , 88U  , 512U    , 100U     , 1U      , 1U       , 0U    , 30U       , 130U     , 10U      , 320U   )
+    X(1 , 66U  , 512U    , 200U     , 5U      , 5U       , 0U    , 6U       , 10U      , 5U        , 50U    ) \
+    X(2 , 77U  , 512U    , 100U     , 3U      , 3U       , 0U    , 8U       , 30U      , 10U       , 200U   ) \
 
 
 #define DEFINE_TASK(ID, MAGIC_NUMBER, STACK_SIZE, MEMORY_USAGE, OFFSET, READ_TIME, EXECUTE_TIME, WRITE_TIME, PERIOD) \
@@ -70,7 +69,8 @@ TASK_LIST
 
 int main(void)
 {
-    test_env_init((TestInit_t)(TEST_INIT_IRQ));
+
+	test_env_init((TestInit_t)(TEST_INIT_IRQ));
 
     PdOS_init();
 
